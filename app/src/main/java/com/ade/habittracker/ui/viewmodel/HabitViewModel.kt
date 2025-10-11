@@ -3,27 +3,44 @@ package com.ade.habittracker.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.ade.habittracker.data.DataStoreManager
+import com.ade.habittracker.data.HabitRepository
 import com.ade.habittracker.model.AppData
 import com.ade.habittracker.model.Habit
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val dataStoreManager = DataStoreManager(application)
+    // 1. ViewModel sekarang hanya tahu tentang Repository
+    private val repository = HabitRepository(application)
 
-    private val _appData = MutableStateFlow<AppData?>(null)
-    val appData: StateFlow<AppData?> = _appData.asStateFlow()
+    // 2. INI ADALAH PERUBAHAN UTAMA:
+    // Kita langsung mengubah Flow dari Repository menjadi StateFlow.
+    // Tidak perlu lagi init block, _appData, atau collect manual.
+    // repository.appDataFlow sudah memberikan kita data AppData? yang benar.
+    val appData: StateFlow<AppData?> = repository.appDataFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
 
-    init {
+    fun addHabit(name: String, schedule: String, weight: Int) {
         viewModelScope.launch {
-            dataStoreManager.appDataFlow.collect { data ->
-                _appData.value = data
-            }
+            val currentData = appData.value ?: return@launch
+            val newHabit = Habit(
+                id = (currentData.habits.maxOfOrNull { it.id } ?: 0) + 1,
+                name = name,
+                schedule = schedule,
+                weight = weight
+            )
+            val updatedHabits = currentData.habits + newHabit
+            repository.saveAppData(currentData.copy(habits = updatedHabits))
         }
     }
 
@@ -32,69 +49,94 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             val currentData = appData.value ?: return@launch
 
             var newTotalXp = currentData.totalXp
-            val habit = currentData.habits.find { it.id == habitId } ?: return@launch
-
-            if (isCompleted) {
-                newTotalXp += habit.weight
-            } else {
-                newTotalXp -= habit.weight
-            }
-            if (newTotalXp < 0) newTotalXp = 0
-
             val updatedHabits = currentData.habits.map {
                 if (it.id == habitId) {
+                    val xpChange = if (isCompleted) it.weight else -it.weight
+                    newTotalXp += xpChange
                     it.copy(isCompleted = isCompleted)
                 } else {
                     it
                 }
             }
 
-            var newLevel = currentData.level
-            val xpForNextLevel = newLevel * 100
-            if (newTotalXp >= xpForNextLevel) {
-                newLevel += 1
-            }
+            val newLevel = calculateLevel(newTotalXp)
+            val dataAfterXp = currentData.copy(habits = updatedHabits, totalXp = newTotalXp, level = newLevel)
 
-            val newData = currentData.copy(
-                habits = updatedHabits,
-                totalXp = newTotalXp,
-                level = newLevel
-            )
-            dataStoreManager.saveAppData(newData)
+            val finalData = checkStreaksAndAchievements(dataAfterXp)
+
+            repository.saveAppData(finalData)
         }
     }
 
-    // --- FUNGSI BARU DITAMBAHKAN DI SINI ---
-    fun addHabit(name: String, schedule: String, weight: Int) {
-        viewModelScope.launch {
-            val currentData = appData.value ?: return@launch
+    private fun checkStreaksAndAchievements(currentData: AppData): AppData {
+        val today = getTodayDateString()
+        val yesterday = getYesterdayDateString()
+        var newStreak = currentData.streak
+        var newLastCompletionDate = currentData.lastCompletionDate
 
-            // Membuat ID unik untuk habit baru
-            // Cari ID tertinggi, lalu tambahkan 1
-            val newHabitId = (currentData.habits.maxOfOrNull { it.id } ?: 0) + 1
+        val anyHabitCompleted = currentData.habits.any { it.isCompleted }
 
-            val newHabit = Habit(
-                id = newHabitId,
-                name = name,
-                schedule = schedule,
-                weight = weight,
-                isCompleted = false
-            )
-
-            // Tambahkan habit baru ke daftar yang sudah ada
-            val updatedHabits = currentData.habits + newHabit
-
-            val newData = currentData.copy(habits = updatedHabits)
-            dataStoreManager.saveAppData(newData)
+        if (anyHabitCompleted) {
+            if (newLastCompletionDate == null) {
+                newStreak = 1
+                newLastCompletionDate = today
+            } else if (newLastCompletionDate == yesterday) {
+                newStreak += 1
+                newLastCompletionDate = today
+            } else if (newLastCompletionDate != today) {
+                newStreak = 1
+                newLastCompletionDate = today
+            }
         }
+
+        val newAchievements = currentData.achievements.map { achievement ->
+            if (achievement.isUnlocked) return@map achievement
+
+            var unlocked = false
+            when (achievement.id) {
+                1 -> if (currentData.totalXp > 0) unlocked = true
+                2 -> if (newStreak >= 7) unlocked = true
+                3 -> if (currentData.level >= 10) unlocked = true
+                4 -> {
+                    val kotlinHabit = currentData.habits.find { it.name.contains("Belajar", ignoreCase = true) }
+                    if (kotlinHabit?.isCompleted == true) {
+                        unlocked = true
+                    }
+                }
+            }
+            if (unlocked) achievement.copy(isUnlocked = true) else achievement
+        }
+
+        return currentData.copy(
+            streak = newStreak,
+            lastCompletionDate = newLastCompletionDate,
+            achievements = newAchievements
+        )
+    }
+
+
+    private fun calculateLevel(totalXp: Int): Int {
+        return (totalXp / 100) + 1
     }
 
     fun getXpProgress(): Pair<Int, Int> {
-        val data = appData.value ?: return 0 to 100
-        val xpForCurrentLevel = (data.level - 1) * 100
-        val xpForNextLevel = data.level * 100
-        val currentXpInLevel = data.totalXp - xpForCurrentLevel
-        return currentXpInLevel to 100
+        val currentData = appData.value ?: return Pair(0, 100)
+        val currentLevel = currentData.level
+        val xpForCurrentLevel = (currentLevel - 1) * 100
+        val currentXpInLevel = currentData.totalXp - xpForCurrentLevel
+        return Pair(currentXpInLevel, 100)
+    }
+
+    private fun getTodayDateString(): String {
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        return formatter.format(Date())
+    }
+
+    private fun getYesterdayDateString(): String {
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, -1)
+        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        return formatter.format(calendar.time)
     }
 }
 

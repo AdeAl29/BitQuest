@@ -7,55 +7,45 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ade.habittracker.model.AppData
-import com.ade.habittracker.model.Habit
-import com.ade.habittracker.model.Achievement
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-// Membuat instance DataStore
+// Inisialisasi DataStore
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "habit_tracker_prefs")
 
-class DataStoreManager(private val context: Context) {
+class DataStoreManager(context: Context) {
+    private val dataStore = context.dataStore
 
-    // Kunci untuk menyimpan data kita dalam format JSON String
     companion object {
-        val APP_DATA_KEY = stringPreferencesKey("app_data")
+        private val APP_DATA_KEY = stringPreferencesKey("app_data")
+        // --- BUAT KEY BARU UNTUK TANGGAL ---
+        private val LAST_COMPLETION_DATE_KEY = stringPreferencesKey("last_completion_date")
     }
 
-    // Fungsi untuk mendapatkan data
-    val appDataFlow: Flow<AppData> = context.dataStore.data.map { preferences ->
-        val jsonString = preferences[APP_DATA_KEY]
-        if (jsonString != null) {
-            Json.decodeFromString<AppData>(jsonString)
-        } else {
-            // Jika data belum ada (pertama kali buka), buat data default
-            createDefaultData()
-        }
-    }
-
-    // Fungsi untuk menyimpan data
+    // Fungsi untuk menyimpan seluruh data aplikasi
     suspend fun saveAppData(appData: AppData) {
-        val jsonString = Json.encodeToString(appData)
-        context.dataStore.edit { preferences ->
-            preferences[APP_DATA_KEY] = jsonString
+        dataStore.edit { preferences ->
+            // Simpan data utama sebagai JSON
+            val appDataJson = Json.encodeToString(
+                appData.copy(lastCompletionDate = null) // Jangan simpan tanggal di dalam JSON
+            )
+            preferences[APP_DATA_KEY] = appDataJson
+
+            // --- SIMPAN TANGGAL SECARA TERPISAH ---
+            preferences[LAST_COMPLETION_DATE_KEY] = appData.lastCompletionDate ?: ""
         }
     }
 
-    // Data awal untuk pengguna baru
-    private fun createDefaultData(): AppData {
-        val defaultHabits = listOf(
-            Habit(1, "Baca Buku 30 Menit", "Setiap Hari", 50, false),
-            Habit(2, "Olahraga Pagi", "Senin, Rabu, Jumat", 40, false),
-            Habit(3, "Belajar Kotlin", "Setiap Hari", 30, false),
-            Habit(4, "Minum 8 Gelas Air", "Setiap Hari", 20, false)
-        )
-        val defaultAchievements = listOf(
-            Achievement(1, "Pemula", "Menyelesaikan habit pertama kali.", false),
-            Achievement(2, "Konsisten", "Menyelesaikan habit selama 7 hari berturut-turut.", false),
-            Achievement(3, "Master Habit", "Mencapai Level 10.", false)
-        )
-        return AppData(habits = defaultHabits, achievements = defaultAchievements)
+    // Flow untuk mendapatkan data aplikasi secara real-time
+    val appDataFlow: Flow<String?> = dataStore.data.map { preferences ->
+        preferences[APP_DATA_KEY]
+    }
+
+    // --- BUAT FLOW BARU UNTUK MENDAPATKAN TANGGAL ---
+    val lastCompletionDateFlow: Flow<String?> = dataStore.data.map { preferences ->
+        preferences[LAST_COMPLETION_DATE_KEY]
     }
 }
+

@@ -27,5 +27,8 @@ data class AppData(
     val achievements: List<Achievement> = emptyList(),
     val totalXp: Int = 0,
     val level: Int = 1,
-    val streak: Int = 0
+    val streak: Int = 0,
+    val lastCompletionDate: String? = null
 )
+
+
