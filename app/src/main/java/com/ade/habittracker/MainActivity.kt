@@ -4,34 +4,30 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,199 +43,418 @@ import com.ade.habittracker.ui.theme.HabitTrackerTheme
 import com.ade.habittracker.ui.viewmodel.HabitViewModel
 import kotlinx.coroutines.launch
 
-// Warna tema sesuai screenshot (dark theme)
+// Definisi Warna
 val DarkBackground = Color(0xFF2C2C2E)
 val CardBackground = Color(0xFF3A3A3C)
-val PrimaryColor = Color(0xFFFFD600) // Kuning untuk highlight
-val TextColorPrimary = Color.White
+val PrimaryColor = Color(0xFF0A84FF) // Biru cerah
+val TextColorPrimary = Color(0xFFFFFFFF)
 val TextColorSecondary = Color(0xFF8E8E93)
-val CheckboxColor = Color(0xFF48D1CC)
+val AccentYellow = Color(0xFFFFCC00)
 
 class MainActivity : ComponentActivity() {
     private val viewModel: HabitViewModel by viewModels()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             HabitTrackerTheme {
-                val appData by viewModel.appData.collectAsStateWithLifecycle()
-
-                if (appData != null) {
-                    MainScreen(viewModel = viewModel, appData = appData!!)
-                } else {
-                    Box(modifier = Modifier.fillMaxSize().background(DarkBackground), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = PrimaryColor)
-                    }
-                }
+                MainScreen(viewModel)
             }
         }
     }
 }
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: HabitViewModel, appData: com.ade.habittracker.model.AppData) {
+fun MainScreen(viewModel: HabitViewModel) {
     val navController = rememberNavController()
-    val sheetState = rememberModalBottomSheetState()
-    val scope = rememberCoroutineScope()
     var showBottomSheet by remember { mutableStateOf(false) }
+    var habitToEdit by remember { mutableStateOf<Habit?>(null) }
+    var habitToDelete by remember { mutableStateOf<Habit?>(null) }
 
     Scaffold(
+        containerColor = DarkBackground,
         bottomBar = { BottomNavigationBar(navController = navController) },
         floatingActionButton = {
-            val navBackStackEntry by navController.currentBackStackEntryAsState()
-            val currentRoute = navBackStackEntry?.destination?.route
+            val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
             if (currentRoute == "habits") {
                 FloatingActionButton(
-                    onClick = { showBottomSheet = true },
-                    containerColor = CheckboxColor,
-                    shape = CircleShape
+                    onClick = {
+                        habitToEdit = null // Pastikan mode tambah baru, bukan edit
+                        showBottomSheet = true
+                    },
+                    containerColor = PrimaryColor,
+                    contentColor = Color.White
                 ) {
-                    Icon(Icons.Filled.Add, "Tambah Habit", tint = Color.White)
+                    Icon(Icons.Filled.Add, contentDescription = "Tambah Habit")
                 }
             }
-        },
-        containerColor = DarkBackground
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            NavigationHost(navController = navController, viewModel = viewModel, appData = appData)
         }
+    ) { innerPadding ->
+        AppNavHost(
+            navController = navController,
+            modifier = Modifier.padding(innerPadding),
+            viewModel = viewModel,
+            onEditClick = { habit ->
+                habitToEdit = habit
+                showBottomSheet = true
+            },
+            onDeleteClick = { habit ->
+                habitToDelete = habit
+            }
+        )
     }
 
     if (showBottomSheet) {
+        val scope = rememberCoroutineScope()
         ModalBottomSheet(
             onDismissRequest = { showBottomSheet = false },
-            sheetState = sheetState,
-            containerColor = DarkBackground
+            sheetState = rememberModalBottomSheetState(),
+            containerColor = CardBackground
         ) {
             AddHabitBottomSheetContent(
+                habitToEdit = habitToEdit,
                 onConfirm = { name, schedule, weight ->
-                    viewModel.addHabit(name, schedule, weight)
-                    scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        if (!sheetState.isVisible) {
-                            showBottomSheet = false
+                    scope.launch {
+                        if (habitToEdit == null) {
+                            viewModel.addHabit(name, schedule, weight)
+                        } else {
+                            viewModel.updateHabit(habitToEdit!!.id, name, schedule, weight)
                         }
+                        showBottomSheet = false
                     }
+                },
+                onCancel = {
+                    scope.launch { showBottomSheet = false }
                 }
             )
         }
     }
+
+    if (habitToDelete != null) {
+        DeleteConfirmationDialog(
+            habitName = habitToDelete!!.name,
+            onConfirm = {
+                viewModel.deleteHabit(habitToDelete!!.id)
+                habitToDelete = null
+            },
+            onDismiss = {
+                habitToDelete = null
+            }
+        )
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddHabitBottomSheetContent(onConfirm: (String, String, Int) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var schedule by remember { mutableStateOf("") }
-    var weight by remember { mutableStateOf("") }
+fun AppNavHost(
+    navController: NavHostController,
+    modifier: Modifier = Modifier,
+    viewModel: HabitViewModel,
+    onEditClick: (Habit) -> Unit,
+    onDeleteClick: (Habit) -> Unit
+) {
+    val appData by viewModel.appData.collectAsStateWithLifecycle()
+
+    NavHost(
+        navController = navController,
+        startDestination = "habits",
+        modifier = modifier
+    ) {
+        composable("habits") {
+            HabitsScreen(
+                habits = appData?.habits ?: emptyList(),
+                onHabitCheckedChanged = { habit, isChecked ->
+                    viewModel.toggleHabitCompleted(habit.id, isChecked)
+                },
+                onEditClick = onEditClick,
+                onDeleteClick = onDeleteClick
+            )
+        }
+        composable("stats") {
+            val (xpProgress, max) = viewModel.getXpProgress()
+            StatsScreen(
+                level = appData?.level ?: 1,
+                streak = appData?.streak ?: 0,
+                totalXp = appData?.totalXp ?: 0,
+                xpProgress = xpProgress,
+                maxXp = max
+            )
+        }
+        composable("achievements") {
+            AchievementsScreen(achievements = appData?.achievements ?: emptyList())
+        }
+    }
+}
+
+@Composable
+fun HabitsScreen(
+    habits: List<Habit>,
+    onHabitCheckedChanged: (Habit, Boolean) -> Unit,
+    onEditClick: (Habit) -> Unit,
+    onDeleteClick: (Habit) -> Unit
+) {
+    var expandedMenuHabitId by remember { mutableStateOf<Int?>(null) }
 
     Column(
         modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            "DAFTAR MISI HARIAN",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextColorPrimary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        if (habits.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Belum ada misi. Tambahkan satu!", color = TextColorSecondary)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(habits, key = { it.id }) { habit ->
+                    HabitItem(
+                        habit = habit,
+                        onCheckedChanged = { isChecked ->
+                            onHabitCheckedChanged(habit, isChecked)
+                        },
+                        isMenuExpanded = expandedMenuHabitId == habit.id,
+                        onMenuClick = {
+                            expandedMenuHabitId = if (expandedMenuHabitId == habit.id) null else habit.id
+                        },
+                        onDismissMenu = { expandedMenuHabitId = null },
+                        onEditClick = { onEditClick(habit) },
+                        onDeleteClick = { onDeleteClick(habit) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HabitItem(
+    habit: Habit,
+    onCheckedChanged: (Boolean) -> Unit,
+    isMenuExpanded: Boolean,
+    onMenuClick: () -> Unit,
+    onDismissMenu: () -> Unit,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    val borderColor = if (habit.isCompleted) PrimaryColor else CardBackground
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        border = BorderStroke(2.dp, borderColor),
+        modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = habit.isCompleted,
+                onCheckedChange = onCheckedChanged,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = PrimaryColor,
+                    uncheckedColor = TextColorSecondary,
+                    checkmarkColor = Color.White
+                )
+            )
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(habit.name, color = TextColorPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(habit.schedule, color = TextColorSecondary, fontSize = 14.sp)
+            }
+            Spacer(Modifier.width(16.dp))
+            Text(
+                "+${habit.weight}\nXP",
+                color = AccentYellow,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 16.sp,
+                fontSize = 16.sp
+            )
+            Box {
+                IconButton(onClick = onMenuClick) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Menu", tint = TextColorSecondary)
+                }
+                DropdownMenu(
+                    expanded = isMenuExpanded,
+                    onDismissRequest = onDismissMenu,
+                    modifier = Modifier.background(Color(0xFF48484A))
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Edit", color = TextColorPrimary) },
+                        onClick = {
+                            onEditClick()
+                            onDismissMenu()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Hapus", color = Color.Red) },
+                        onClick = {
+                            onDeleteClick()
+                            onDismissMenu()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun StatsScreen(level: Int, streak: Int, totalXp: Int, xpProgress: Int, maxXp: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Misi Harian Baru", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextColorPrimary)
-        Spacer(modifier = Modifier.height(16.dp))
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text("Nama Misi") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = CardBackground,
-                unfocusedContainerColor = CardBackground,
-                disabledContainerColor = CardBackground,
-                focusedIndicatorColor = PrimaryColor,
-                cursorColor = PrimaryColor,
-                focusedTextColor = TextColorPrimary,
-                unfocusedTextColor = TextColorPrimary,
-                focusedLabelColor = TextColorSecondary,
-                unfocusedLabelColor = TextColorSecondary,
-            )
+        Text(
+            "PROFIL & STATS",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextColorPrimary,
+            modifier = Modifier.padding(bottom = 32.dp)
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = schedule,
-            onValueChange = { schedule = it },
-            label = { Text("Jwal (cth: Setiap Hari)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = CardBackground,
-                unfocusedContainerColor = CardBackground,
-                disabledContainerColor = CardBackground,
-                focusedIndicatorColor = PrimaryColor,
-                cursorColor = PrimaryColor,
-                focusedTextColor = TextColorPrimary,
-                unfocusedTextColor = TextColorPrimary,
-                focusedLabelColor = TextColorSecondary,
-                unfocusedLabelColor = TextColorSecondary,
+
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(200.dp)) {
+            CircularProgressIndicator(
+                progress = xpProgress.toFloat() / maxXp.toFloat(),
+                modifier = Modifier.fillMaxSize(),
+                strokeWidth = 12.dp,
+                color = AccentYellow,
+                trackColor = CardBackground
             )
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = weight,
-            onValueChange = { weight = it.filter { char -> char.isDigit() } },
-            label = { Text("Bobot (XP)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = CardBackground,
-                unfocusedContainerColor = CardBackground,
-                disabledContainerColor = CardBackground,
-                focusedIndicatorColor = PrimaryColor,
-                cursorColor = PrimaryColor,
-                focusedTextColor = TextColorPrimary,
-                unfocusedTextColor = TextColorPrimary,
-                focusedLabelColor = TextColorSecondary,
-                unfocusedLabelColor = TextColorSecondary,
-            )
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(
-            onClick = {
-                val weightInt = weight.toIntOrNull() ?: 0
-                if (name.isNotBlank() && schedule.isNotBlank() && weightInt > 0) {
-                    onConfirm(name, schedule, weightInt)
-                }
-            },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = CheckboxColor)
-        ) {
-            Text("Tambah Misi", fontSize = 16.sp, color = Color.White)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("LEVEL", color = TextColorSecondary, fontSize = 16.sp)
+                Text(
+                    text = "$level",
+                    color = TextColorPrimary,
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text("$xpProgress/$maxXp XP", color = TextColorSecondary, fontSize = 16.sp)
+            }
         }
-        Spacer(modifier = Modifier.height(16.dp))
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            StatCard(title = "STREAK", value = "$streak HARI", icon = Icons.Default.CheckCircle, iconColor = Color.Red)
+            StatCard(title = "TOTAL XP", value = "$totalXp", icon = Icons.Default.Star, iconColor = AccentYellow)
+        }
+    }
+}
+
+@Composable
+fun StatCard(title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, iconColor: Color) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        modifier = Modifier.size(width = 160.dp, height = 120.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(icon, contentDescription = title, tint = iconColor, modifier = Modifier.size(32.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(value, color = TextColorPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(title, color = TextColorSecondary, fontSize = 14.sp)
+        }
     }
 }
 
 
 @Composable
-fun NavigationHost(
-    navController: NavHostController,
-    viewModel: HabitViewModel,
-    appData: com.ade.habittracker.model.AppData
-) {
-    NavHost(navController = navController, startDestination = "habits") {
-        composable("habits") { HabitsScreen(habits = appData.habits, onHabitToggled = viewModel::toggleHabitCompleted) }
-        composable("stats") { StatsScreen(appData = appData, viewModel = viewModel) }
-        composable("achievements") { AchievementsScreen(achievements = appData.achievements) }
+fun AchievementsScreen(achievements: List<Achievement>) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            "PENCAPAIAN",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextColorPrimary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        if (achievements.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Belum ada pencapaian tersedia.", color = TextColorSecondary)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(achievements) { achievement ->
+                    AchievementItem(achievement = achievement)
+                }
+            }
+        }
     }
 }
 
-// --- PERBAIKAN DILAKUKAN DI SINI ---
+@Composable
+fun AchievementItem(achievement: Achievement) {
+    val borderColor = if (achievement.isUnlocked) AccentYellow else CardBackground
+    val iconColor = if (achievement.isUnlocked) AccentYellow else TextColorSecondary
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        border = BorderStroke(2.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF48484A)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Star, contentDescription = "Icon Bintang", tint = iconColor)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(achievement.title, color = TextColorPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(achievement.description, color = TextColorSecondary, fontSize = 14.sp)
+            }
+            if (achievement.isUnlocked) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Tercapai",
+                    tint = AccentYellow,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
+
+
 @Composable
 fun BottomNavigationBar(navController: NavController) {
     val items = listOf(
-        BottomNavItem("habits", "Habits", Icons.Default.Checklist),
-        BottomNavItem("stats", "Statistik", Icons.Default.BarChart),
-        BottomNavItem("achievements", "Pencapaian", Icons.Default.EmojiEvents)
+        NavigationItem("habits", Icons.Default.List, "Habits"),
+        NavigationItem("stats", Icons.Default.BarChart, "Statistik"),
+        NavigationItem("achievements", Icons.Default.EmojiEvents, "Pencapaian")
     )
-
     NavigationBar(
         containerColor = CardBackground,
         contentColor = TextColorSecondary
@@ -254,15 +469,15 @@ fun BottomNavigationBar(navController: NavController) {
                 selected = currentRoute == item.route,
                 onClick = {
                     navController.navigate(item.route) {
-                        popUpTo(navController.graph.startDestinationId)
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
                         launchSingleTop = true
+                        restoreState = true
                     }
                 },
                 colors = NavigationBarItemDefaults.colors(
                     selectedIconColor = PrimaryColor,
                     unselectedIconColor = TextColorSecondary,
                     selectedTextColor = PrimaryColor,
-                    // INI YANG DIPERBAIKI: unfocusedTextColor -> unselectedTextColor
                     unselectedTextColor = TextColorSecondary,
                     indicatorColor = CardBackground
                 )
@@ -270,278 +485,143 @@ fun BottomNavigationBar(navController: NavController) {
         }
     }
 }
-data class BottomNavItem(val route: String, val title: String, val icon: ImageVector)
 
-// ... Sisa kode di bawah ini SAMA PERSIS dan tidak perlu diubah ...
+data class NavigationItem(val route: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: String)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HabitsScreen(habits: List<Habit>, onHabitToggled: (Int, Boolean) -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "DAFTAR MISI HARIAN",
-            color = TextColorPrimary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+fun AddHabitBottomSheetContent(
+    habitToEdit: Habit?,
+    onConfirm: (String, String, Int) -> Unit,
+    onCancel: () -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var schedule by remember { mutableStateOf("") }
+    var weight by remember { mutableStateOf("") }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(habits, key = { it.id }) { habit ->
-                HabitItem(
-                    habit = habit,
-                    onCheckedChange = { isChecked ->
-                        onHabitToggled(habit.id, isChecked)
-                    }
-                )
-            }
+    LaunchedEffect(habitToEdit) {
+        if (habitToEdit != null) {
+            name = habitToEdit.name
+            schedule = habitToEdit.schedule
+            weight = habitToEdit.weight.toString()
         }
     }
-}
 
-@Composable
-fun HabitItem(habit: Habit, onCheckedChange: (Boolean) -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
-        border = if (habit.isCompleted) BorderStroke(2.dp, CheckboxColor) else null
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = habit.isCompleted,
-                onCheckedChange = onCheckedChange,
-                colors = CheckboxDefaults.colors(
-                    checkedColor = CheckboxColor,
-                    uncheckedColor = TextColorSecondary,
-                    checkmarkColor = DarkBackground
-                )
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = habit.name, color = TextColorPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Text(text = habit.schedule, color = TextColorSecondary, fontSize = 14.sp)
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "+${habit.weight}",
-                    color = PrimaryColor,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "XP",
-                    color = PrimaryColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun StatsScreen(appData: com.ade.habittracker.model.AppData, viewModel: HabitViewModel) {
-    val (currentXp, totalXpForLevel) = viewModel.getXpProgress()
+    val isFormValid = name.isNotBlank() && schedule.isNotBlank() && weight.toIntOrNull() != null
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "PROFIL & STATS",
-            color = TextColorPrimary,
+            text = if (habitToEdit == null) "Tambah Misi Baru" else "Edit Misi",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .align(Alignment.Start)
-                .padding(bottom = 24.dp)
-        )
-
-        LevelIndicator(level = appData.level, currentXp = currentXp, totalXpForLevel = totalXpForLevel)
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            StatCard(
-                title = "STREAK",
-                value = "${appData.streak} HARI",
-                icon = { Icon(Icons.Default.Checklist, contentDescription = "Streak", tint = Color.Red, modifier = Modifier.size(32.dp)) },
-                modifier = Modifier.weight(1f)
-            )
-            StatCard(
-                title = "TOTAL XP",
-                value = appData.totalXp.toString(),
-                icon = { Icon(Icons.Rounded.Star, contentDescription = "Total XP", tint = PrimaryColor, modifier = Modifier.size(32.dp)) },
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-fun LevelIndicator(
-    level: Int,
-    currentXp: Int,
-    totalXpForLevel: Int,
-    strokeWidth: Dp = 12.dp,
-    size: Dp = 200.dp
-) {
-    val progress = if (totalXpForLevel > 0) currentXp.toFloat() / totalXpForLevel.toFloat() else 0f
-    val sweepAngle = 360 * progress
-
-    Box(
-        modifier = Modifier.size(size),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            drawArc(
-                color = CardBackground,
-                startAngle = -90f,
-                sweepAngle = 360f,
-                useCenter = false,
-                style = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round)
-            )
-            drawArc(
-                color = PrimaryColor,
-                startAngle = -90f,
-                sweepAngle = sweepAngle,
-                useCenter = false,
-                style = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round)
-            )
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("LEVEL", fontSize = 18.sp, color = TextColorSecondary)
-            Text(
-                text = "$level",
-                fontSize = 60.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextColorPrimary
-            )
-            Text("$currentXp / $totalXpForLevel XP", fontSize = 16.sp, color = TextColorSecondary)
-        }
-    }
-}
-
-@Composable
-fun StatCard(
-    title: String,
-    value: String,
-    icon: @Composable () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.height(120.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardBackground)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            icon()
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(title, color = TextColorSecondary, fontSize = 14.sp)
-            Text(value, color = TextColorPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-fun AchievementsScreen(achievements: List<Achievement>) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "PENCAPAIAN",
             color = TextColorPrimary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp)
         )
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(achievements) { achievement ->
-                AchievementItem(achievement = achievement)
-            }
-        }
-    }
-}
-
-@Composable
-fun AchievementItem(achievement: Achievement) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = CardBackground,
-            contentColor = if (achievement.isUnlocked) TextColorPrimary else TextColorSecondary
-        ),
-        border = if (achievement.isUnlocked) BorderStroke(2.dp, PrimaryColor) else null
-    ) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = { newName -> name = newName }, // DIGANTI DARI 'it'
+            label = { Text("Nama Misi") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = TextFieldDefaults.colors( // MENGGUNAKAN .colors() YANG BARU
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = PrimaryColor,
+                unfocusedIndicatorColor = TextColorSecondary,
+                cursorColor = PrimaryColor,
+                focusedTextColor = TextColorPrimary,
+                unfocusedTextColor = TextColorPrimary,
+                focusedLabelColor = PrimaryColor,
+                unfocusedLabelColor = TextColorSecondary
+            )
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = schedule,
+            onValueChange = { newSchedule -> schedule = newSchedule }, // DIGANTI DARI 'it'
+            label = { Text("Jadwal (cth: Setiap Hari, Senin)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = TextFieldDefaults.colors( // MENGGUNAKAN .colors() YANG BARU
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = PrimaryColor,
+                unfocusedIndicatorColor = TextColorSecondary,
+                cursorColor = PrimaryColor,
+                focusedTextColor = TextColorPrimary,
+                unfocusedTextColor = TextColorPrimary,
+                focusedLabelColor = PrimaryColor,
+                unfocusedLabelColor = TextColorSecondary
+            )
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = weight,
+            onValueChange = { newWeight -> weight = newWeight.filter { char -> char.isDigit() } }, // DIGANTI DARI 'it'
+            label = { Text("Bobot (XP)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = TextFieldDefaults.colors( // MENGGUNAKAN .colors() YANG BARU
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = PrimaryColor,
+                unfocusedIndicatorColor = TextColorSecondary,
+                cursorColor = PrimaryColor,
+                focusedTextColor = TextColorPrimary,
+                unfocusedTextColor = TextColorPrimary,
+                focusedLabelColor = PrimaryColor,
+                unfocusedLabelColor = TextColorSecondary
+            )
+        )
+        Spacer(Modifier.height(24.dp))
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape)
-                    .background(if (achievement.isUnlocked) PrimaryColor.copy(alpha = 0.2f) else CardBackground),
-                contentAlignment = Alignment.Center
+            Button(
+                onClick = onCancel,
+                colors = ButtonDefaults.buttonColors(containerColor = TextColorSecondary)
             ) {
-                Icon(
-                    Icons.Rounded.Star,
-                    contentDescription = "Achievement Icon",
-                    tint = if (achievement.isUnlocked) PrimaryColor else TextColorSecondary,
-                    modifier = Modifier.size(30.dp)
-                )
+                Text("Batal")
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = achievement.title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = achievement.description,
-                    fontSize = 14.sp,
-                )
-            }
-            if (achievement.isUnlocked) {
-                Icon(
-                    Icons.Default.EmojiEvents,
-                    contentDescription = "Unlocked",
-                    tint = PrimaryColor,
-                    modifier = Modifier.padding(start=8.dp)
-                )
+            Button(
+                onClick = { onConfirm(name, schedule, weight.toInt()) },
+                enabled = isFormValid,
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor)
+            ) {
+                Text(if (habitToEdit == null) "Tambah Misi" else "Simpan Perubahan")
             }
         }
+        Spacer(Modifier.height(16.dp))
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun DefaultPreview() {
-    // Preview will not work perfectly as it needs a ViewModel
+fun DeleteConfirmationDialog(
+    habitName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Hapus Misi?", color = TextColorPrimary) },
+        text = { Text("Apakah Anda yakin ingin menghapus misi \"$habitName\"?", color = TextColorSecondary) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("Hapus", color = Color.Red)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal", color = PrimaryColor)
+            }
+        },
+        containerColor = CardBackground
+    )
 }
 

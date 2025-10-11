@@ -17,13 +17,8 @@ import java.util.Locale
 
 class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
-    // 1. ViewModel sekarang hanya tahu tentang Repository
     private val repository = HabitRepository(application)
 
-    // 2. INI ADALAH PERUBAHAN UTAMA:
-    // Kita langsung mengubah Flow dari Repository menjadi StateFlow.
-    // Tidak perlu lagi init block, _appData, atau collect manual.
-    // repository.appDataFlow sudah memberikan kita data AppData? yang benar.
     val appData: StateFlow<AppData?> = repository.appDataFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -41,6 +36,57 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             )
             val updatedHabits = currentData.habits + newHabit
             repository.saveAppData(currentData.copy(habits = updatedHabits))
+        }
+    }
+
+    // --- FUNGSI BARU UNTUK EDIT ---
+    fun updateHabit(id: Int, name: String, schedule: String, weight: Int) {
+        viewModelScope.launch {
+            val currentData = appData.value ?: return@launch
+
+            // Cari habit lama untuk memeriksa apakah bobotnya berubah
+            val oldHabit = currentData.habits.find { it.id == id } ?: return@launch
+
+            var newTotalXp = currentData.totalXp
+
+            // Jika habit sudah selesai dan bobotnya diubah, sesuaikan total XP
+            if (oldHabit.isCompleted) {
+                val xpDifference = weight - oldHabit.weight
+                newTotalXp += xpDifference
+            }
+
+            val updatedHabits = currentData.habits.map { habit ->
+                if (habit.id == id) {
+                    habit.copy(name = name, schedule = schedule, weight = weight)
+                } else {
+                    habit
+                }
+            }
+
+            val newLevel = calculateLevel(newTotalXp)
+            val updatedData = currentData.copy(habits = updatedHabits, totalXp = newTotalXp, level = newLevel)
+
+            repository.saveAppData(updatedData)
+        }
+    }
+
+    // --- FUNGSI BARU UNTUK HAPUS ---
+    fun deleteHabit(habitId: Int) {
+        viewModelScope.launch {
+            val currentData = appData.value ?: return@launch
+            val habitToDelete = currentData.habits.find { it.id == habitId } ?: return@launch
+
+            var newTotalXp = currentData.totalXp
+            // Jika habit yang dihapus sudah selesai, kurangi XP-nya dari total
+            if (habitToDelete.isCompleted) {
+                newTotalXp -= habitToDelete.weight
+            }
+
+            val updatedHabits = currentData.habits.filter { it.id != habitId }
+            val newLevel = calculateLevel(newTotalXp)
+            val updatedData = currentData.copy(habits = updatedHabits, totalXp = newTotalXp, level = newLevel)
+
+            repository.saveAppData(updatedData)
         }
     }
 
@@ -114,9 +160,9 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-
     private fun calculateLevel(totalXp: Int): Int {
-        return (totalXp / 100) + 1
+        // Mencegah level menjadi 0 atau negatif jika XP negatif
+        return if (totalXp < 0) 1 else (totalXp / 100) + 1
     }
 
     fun getXpProgress(): Pair<Int, Int> {
