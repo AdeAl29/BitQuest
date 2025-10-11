@@ -3,7 +3,8 @@ package com.ade.habittracker
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.BorderStroke // <-- PERBAIKAN: Import yang ditambahkan
+import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -22,25 +23,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.ade.habittracker.model.Achievement
+import com.ade.habittracker.model.Habit
 import com.ade.habittracker.ui.theme.HabitTrackerTheme
+import com.ade.habittracker.ui.viewmodel.HabitViewModel
 
 // Warna tema sesuai screenshot (dark theme)
 val DarkBackground = Color(0xFF2C2C2E)
@@ -48,46 +50,41 @@ val CardBackground = Color(0xFF3A3A3C)
 val PrimaryColor = Color(0xFFFFD600) // Kuning untuk highlight
 val TextColorPrimary = Color.White
 val TextColorSecondary = Color(0xFF8E8E93)
-val BottomNavBackground = Color(0xFF1C1C1E)
 val CheckboxColor = Color(0xFF48D1CC)
 
 class MainActivity : ComponentActivity() {
+    // Inisialisasi ViewModel
+    private val viewModel: HabitViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             HabitTrackerTheme {
-                MainScreen()
+                // Ambil data dari ViewModel
+                val appData by viewModel.appData.collectAsStateWithLifecycle()
+
+                if (appData != null) {
+                    MainScreen(viewModel = viewModel, appData = appData!!)
+                } else {
+                    // Tampilkan loading indicator saat data sedang dimuat
+                    Box(modifier = Modifier.fillMaxSize().background(DarkBackground), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = PrimaryColor)
+                    }
+                }
             }
         }
     }
 }
 
-// Data class dummy untuk menampung data UI sementara
-data class Habit(
-    val id: Int,
-    val name: String,
-    val schedule: String,
-    val xp: Int,
-    val isCompleted: Boolean
-)
-
-data class Achievement(
-    val id: Int,
-    val title: String,
-    val description: String,
-    val isUnlocked: Boolean
-)
-
 
 // Composable utama yang mengatur seluruh layar
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(viewModel: HabitViewModel, appData: com.ade.habittracker.model.AppData) {
     val navController = rememberNavController()
     Scaffold(
         bottomBar = { BottomNavigationBar(navController = navController) },
         floatingActionButton = {
-            // Hanya tampilkan FAB di halaman Habits
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentRoute = navBackStackEntry?.destination?.route
             if (currentRoute == "habits") {
@@ -103,22 +100,26 @@ fun MainScreen() {
         containerColor = DarkBackground
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
-            NavigationHost(navController = navController)
+            NavigationHost(navController = navController, viewModel = viewModel, appData = appData)
         }
     }
 }
 
 // Composable untuk Navigasi Halaman
 @Composable
-fun NavigationHost(navController: NavHostController) {
+fun NavigationHost(
+    navController: NavHostController,
+    viewModel: HabitViewModel,
+    appData: com.ade.habittracker.model.AppData
+) {
     NavHost(navController = navController, startDestination = "habits") {
-        composable("habits") { HabitsScreen() }
-        composable("stats") { StatsScreen() }
-        composable("achievements") { AchievementsScreen() }
+        composable("habits") { HabitsScreen(habits = appData.habits, onHabitToggled = viewModel::toggleHabitCompleted) }
+        composable("stats") { StatsScreen(appData = appData, viewModel = viewModel) }
+        composable("achievements") { AchievementsScreen(achievements = appData.achievements) }
     }
 }
 
-// Composable untuk Bottom Navigation Bar
+// Composable untuk Bottom Navigation Bar (Sama seperti sebelumnya, tidak ada perubahan)
 @Composable
 fun BottomNavigationBar(navController: NavController) {
     val items = listOf(
@@ -141,7 +142,6 @@ fun BottomNavigationBar(navController: NavController) {
                 selected = currentRoute == item.route,
                 onClick = {
                     navController.navigate(item.route) {
-                        // Navigasi dengan popUpTo untuk menghindari tumpukan halaman yang sama
                         popUpTo(navController.graph.startDestinationId)
                         launchSingleTop = true
                     }
@@ -157,23 +157,12 @@ fun BottomNavigationBar(navController: NavController) {
         }
     }
 }
-
-// Data class untuk item di Bottom Navigation
 data class BottomNavItem(val route: String, val title: String, val icon: ImageVector)
+
 
 // --- Halaman Daftar Misi Harian (Habits) ---
 @Composable
-fun HabitsScreen() {
-    // Data dummy untuk tampilan awal
-    val habits = remember {
-        mutableStateListOf(
-            Habit(1, "Baca Buku 30 Menit", "Setiap Hari", 50, true),
-            Habit(2, "Olahraga Pagi", "Senin, Rabu, Jumat", 40, false),
-            Habit(3, "Belajar Kotlin", "Setiap Hari", 30, false),
-            Habit(4, "Minum 8 Gelas Air", "Setiap Hari", 20, true)
-        )
-    }
-
+fun HabitsScreen(habits: List<Habit>, onHabitToggled: (Int, Boolean) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -189,13 +178,10 @@ fun HabitsScreen() {
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(habits, key = { it.id }) { habit ->
-                var isChecked by remember { mutableStateOf(habit.isCompleted) }
                 HabitItem(
                     habit = habit,
-                    isChecked = isChecked,
-                    onCheckedChange = { newCheckedState ->
-                        isChecked = newCheckedState
-                        // TODO: Tambahkan logika update habit ke ViewModel/DataStore
+                    onCheckedChange = { isChecked ->
+                        onHabitToggled(habit.id, isChecked)
                     }
                 )
             }
@@ -204,12 +190,12 @@ fun HabitsScreen() {
 }
 
 @Composable
-fun HabitItem(habit: Habit, isChecked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+fun HabitItem(habit: Habit, onCheckedChange: (Boolean) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CardBackground),
-        border = if (isChecked) BorderStroke(2.dp, CheckboxColor) else null
+        border = if (habit.isCompleted) BorderStroke(2.dp, CheckboxColor) else null
     ) {
         Row(
             modifier = Modifier
@@ -218,7 +204,7 @@ fun HabitItem(habit: Habit, isChecked: Boolean, onCheckedChange: (Boolean) -> Un
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(
-                checked = isChecked,
+                checked = habit.isCompleted,
                 onCheckedChange = onCheckedChange,
                 colors = CheckboxDefaults.colors(
                     checkedColor = CheckboxColor,
@@ -234,7 +220,7 @@ fun HabitItem(habit: Habit, isChecked: Boolean, onCheckedChange: (Boolean) -> Un
             Spacer(modifier = Modifier.width(16.dp))
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "+${habit.xp}",
+                    text = "+${habit.weight}",
                     color = PrimaryColor,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -252,7 +238,9 @@ fun HabitItem(habit: Habit, isChecked: Boolean, onCheckedChange: (Boolean) -> Un
 
 // --- Halaman Profil & Statistik ---
 @Composable
-fun StatsScreen() {
+fun StatsScreen(appData: com.ade.habittracker.model.AppData, viewModel: HabitViewModel) {
+    val (currentXp, totalXpForLevel) = viewModel.getXpProgress()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -269,7 +257,7 @@ fun StatsScreen() {
                 .padding(bottom = 24.dp)
         )
 
-        LevelIndicator(level = 2, currentXp = 25, totalXpForLevel = 100)
+        LevelIndicator(level = appData.level, currentXp = currentXp, totalXpForLevel = totalXpForLevel)
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -279,13 +267,13 @@ fun StatsScreen() {
         ) {
             StatCard(
                 title = "STREAK",
-                value = "5 HARI",
-                icon = { Icon(Icons.Default.Checklist, contentDescription = "Streak", tint = Color.Red, modifier = Modifier.size(32.dp)) }, // Ganti dengan icon api
+                value = "${appData.streak} HARI",
+                icon = { Icon(Icons.Default.Checklist, contentDescription = "Streak", tint = Color.Red, modifier = Modifier.size(32.dp)) },
                 modifier = Modifier.weight(1f)
             )
             StatCard(
                 title = "TOTAL XP",
-                value = "125",
+                value = appData.totalXp.toString(),
                 icon = { Icon(Icons.Rounded.Star, contentDescription = "Total XP", tint = PrimaryColor, modifier = Modifier.size(32.dp)) },
                 modifier = Modifier.weight(1f)
             )
@@ -301,7 +289,7 @@ fun LevelIndicator(
     strokeWidth: Dp = 12.dp,
     size: Dp = 200.dp
 ) {
-    val progress = (currentXp.toFloat() / totalXpForLevel.toFloat())
+    val progress = if (totalXpForLevel > 0) currentXp.toFloat() / totalXpForLevel.toFloat() else 0f
     val sweepAngle = 360 * progress
 
     Box(
@@ -366,14 +354,7 @@ fun StatCard(
 
 // --- Halaman Pencapaian ---
 @Composable
-fun AchievementsScreen() {
-    val achievements = listOf(
-        Achievement(1, "Pemula", "Menyelesaikan habit pertama kali.", true),
-        Achievement(2, "Konsisten", "Menyelesaikan habit selama 7 hari berturut-turut.", true),
-        Achievement(3, "Master Habit", "Mencapai Level 10.", false),
-        Achievement(4, "Rajin Belajar", "Menyelesaikan habit 'Belajar' 10 kali.", false)
-    )
-
+fun AchievementsScreen(achievements: List<Achievement>) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -450,12 +431,10 @@ fun AchievementItem(achievement: Achievement) {
     }
 }
 
-// Preview untuk melihat hasil di Android Studio
-@Preview(showBackground = true, backgroundColor = 0xFF2C2C2E)
+
+@Preview(showBackground = true)
 @Composable
 fun DefaultPreview() {
-    HabitTrackerTheme {
-        MainScreen()
-    }
+    // Preview tidak akan berfungsi sempurna karena butuh ViewModel
 }
 

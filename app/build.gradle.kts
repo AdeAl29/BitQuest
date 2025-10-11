@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.23"
 }
 
 android {
@@ -61,4 +62,14 @@ dependencies {
 
 // Icons
     implementation("androidx.compose.material:material-icons-extended:1.6.7")
+    
+    // ViewModel Compose
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
+
+// Jetpack DataStore
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+// Kotlinx Serialization for JSON
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+
 }
