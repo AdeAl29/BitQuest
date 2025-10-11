@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -43,6 +45,7 @@ import com.ade.habittracker.model.Achievement
 import com.ade.habittracker.model.Habit
 import com.ade.habittracker.ui.theme.HabitTrackerTheme
 import com.ade.habittracker.ui.viewmodel.HabitViewModel
+import kotlinx.coroutines.launch
 
 // Warna tema sesuai screenshot (dark theme)
 val DarkBackground = Color(0xFF2C2C2E)
@@ -53,20 +56,17 @@ val TextColorSecondary = Color(0xFF8E8E93)
 val CheckboxColor = Color(0xFF48D1CC)
 
 class MainActivity : ComponentActivity() {
-    // Inisialisasi ViewModel
     private val viewModel: HabitViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             HabitTrackerTheme {
-                // Ambil data dari ViewModel
                 val appData by viewModel.appData.collectAsStateWithLifecycle()
 
                 if (appData != null) {
                     MainScreen(viewModel = viewModel, appData = appData!!)
                 } else {
-                    // Tampilkan loading indicator saat data sedang dimuat
                     Box(modifier = Modifier.fillMaxSize().background(DarkBackground), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = PrimaryColor)
                     }
@@ -77,11 +77,14 @@ class MainActivity : ComponentActivity() {
 }
 
 
-// Composable utama yang mengatur seluruh layar
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(viewModel: HabitViewModel, appData: com.ade.habittracker.model.AppData) {
     val navController = rememberNavController()
+    val sheetState = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
+    var showBottomSheet by remember { mutableStateOf(false) }
+
     Scaffold(
         bottomBar = { BottomNavigationBar(navController = navController) },
         floatingActionButton = {
@@ -89,7 +92,7 @@ fun MainScreen(viewModel: HabitViewModel, appData: com.ade.habittracker.model.Ap
             val currentRoute = navBackStackEntry?.destination?.route
             if (currentRoute == "habits") {
                 FloatingActionButton(
-                    onClick = { /* TODO: Logika untuk menambah habit baru */ },
+                    onClick = { showBottomSheet = true },
                     containerColor = CheckboxColor,
                     shape = CircleShape
                 ) {
@@ -103,9 +106,118 @@ fun MainScreen(viewModel: HabitViewModel, appData: com.ade.habittracker.model.Ap
             NavigationHost(navController = navController, viewModel = viewModel, appData = appData)
         }
     }
+
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBottomSheet = false },
+            sheetState = sheetState,
+            containerColor = DarkBackground
+        ) {
+            AddHabitBottomSheetContent(
+                onConfirm = { name, schedule, weight ->
+                    viewModel.addHabit(name, schedule, weight)
+                    scope.launch { sheetState.hide() }.invokeOnCompletion {
+                        if (!sheetState.isVisible) {
+                            showBottomSheet = false
+                        }
+                    }
+                }
+            )
+        }
+    }
 }
 
-// Composable untuk Navigasi Halaman
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddHabitBottomSheetContent(onConfirm: (String, String, Int) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var schedule by remember { mutableStateOf("") }
+    var weight by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("Misi Harian Baru", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextColorPrimary)
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Nama Misi") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = CardBackground,
+                unfocusedContainerColor = CardBackground,
+                disabledContainerColor = CardBackground,
+                focusedIndicatorColor = PrimaryColor,
+                cursorColor = PrimaryColor,
+                focusedTextColor = TextColorPrimary,
+                unfocusedTextColor = TextColorPrimary,
+                focusedLabelColor = TextColorSecondary,
+                unfocusedLabelColor = TextColorSecondary,
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = schedule,
+            onValueChange = { schedule = it },
+            label = { Text("Jwal (cth: Setiap Hari)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = CardBackground,
+                unfocusedContainerColor = CardBackground,
+                disabledContainerColor = CardBackground,
+                focusedIndicatorColor = PrimaryColor,
+                cursorColor = PrimaryColor,
+                focusedTextColor = TextColorPrimary,
+                unfocusedTextColor = TextColorPrimary,
+                focusedLabelColor = TextColorSecondary,
+                unfocusedLabelColor = TextColorSecondary,
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = weight,
+            onValueChange = { weight = it.filter { char -> char.isDigit() } },
+            label = { Text("Bobot (XP)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = CardBackground,
+                unfocusedContainerColor = CardBackground,
+                disabledContainerColor = CardBackground,
+                focusedIndicatorColor = PrimaryColor,
+                cursorColor = PrimaryColor,
+                focusedTextColor = TextColorPrimary,
+                unfocusedTextColor = TextColorPrimary,
+                focusedLabelColor = TextColorSecondary,
+                unfocusedLabelColor = TextColorSecondary,
+            )
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = {
+                val weightInt = weight.toIntOrNull() ?: 0
+                if (name.isNotBlank() && schedule.isNotBlank() && weightInt > 0) {
+                    onConfirm(name, schedule, weightInt)
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = CheckboxColor)
+        ) {
+            Text("Tambah Misi", fontSize = 16.sp, color = Color.White)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+
 @Composable
 fun NavigationHost(
     navController: NavHostController,
@@ -119,7 +231,7 @@ fun NavigationHost(
     }
 }
 
-// Composable untuk Bottom Navigation Bar (Sama seperti sebelumnya, tidak ada perubahan)
+// --- PERBAIKAN DILAKUKAN DI SINI ---
 @Composable
 fun BottomNavigationBar(navController: NavController) {
     val items = listOf(
@@ -150,6 +262,7 @@ fun BottomNavigationBar(navController: NavController) {
                     selectedIconColor = PrimaryColor,
                     unselectedIconColor = TextColorSecondary,
                     selectedTextColor = PrimaryColor,
+                    // INI YANG DIPERBAIKI: unfocusedTextColor -> unselectedTextColor
                     unselectedTextColor = TextColorSecondary,
                     indicatorColor = CardBackground
                 )
@@ -159,8 +272,7 @@ fun BottomNavigationBar(navController: NavController) {
 }
 data class BottomNavItem(val route: String, val title: String, val icon: ImageVector)
 
-
-// --- Halaman Daftar Misi Harian (Habits) ---
+// ... Sisa kode di bawah ini SAMA PERSIS dan tidak perlu diubah ...
 @Composable
 fun HabitsScreen(habits: List<Habit>, onHabitToggled: (Int, Boolean) -> Unit) {
     Column(
@@ -236,7 +348,6 @@ fun HabitItem(habit: Habit, onCheckedChange: (Boolean) -> Unit) {
     }
 }
 
-// --- Halaman Profil & Statistik ---
 @Composable
 fun StatsScreen(appData: com.ade.habittracker.model.AppData, viewModel: HabitViewModel) {
     val (currentXp, totalXpForLevel) = viewModel.getXpProgress()
@@ -297,7 +408,6 @@ fun LevelIndicator(
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // Background circle
             drawArc(
                 color = CardBackground,
                 startAngle = -90f,
@@ -305,7 +415,6 @@ fun LevelIndicator(
                 useCenter = false,
                 style = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round)
             )
-            // Progress arc
             drawArc(
                 color = PrimaryColor,
                 startAngle = -90f,
@@ -352,7 +461,6 @@ fun StatCard(
     }
 }
 
-// --- Halaman Pencapaian ---
 @Composable
 fun AchievementsScreen(achievements: List<Achievement>) {
     Column(
@@ -431,10 +539,9 @@ fun AchievementItem(achievement: Achievement) {
     }
 }
 
-
 @Preview(showBackground = true)
 @Composable
 fun DefaultPreview() {
-    // Preview tidak akan berfungsi sempurna karena butuh ViewModel
+    // Preview will not work perfectly as it needs a ViewModel
 }
 
