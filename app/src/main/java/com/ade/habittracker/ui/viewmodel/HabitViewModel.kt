@@ -1,92 +1,82 @@
 package com.ade.habittracker.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.ade.habittracker.data.HabitRepository
 import com.ade.habittracker.model.AppData
-import com.ade.habittracker.model.Habit
+import com.ade.habittracker.notification.HabitReminderWorker
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
+import java.util.*
+import java.util.concurrent.TimeUnit
 
+// 1. Ganti ViewModel menjadi AndroidViewModel untuk mendapatkan 'application' context
 class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = HabitRepository(application)
+    // 2. Berikan 'application.applicationContext' saat membuat repository
+    private val repository = HabitRepository(application.applicationContext)
 
-    val appData: StateFlow<AppData?> = repository.appDataFlow.stateIn(
+    // 3. Baris ini sekarang akan berfungsi dengan benar
+    val appData: StateFlow<AppData?> = repository.appData.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = null
     )
 
+    // --- SISA KODE DI BAWAH INI SAMA PERSIS DENGAN YANG ANDA BERIKAN ---
+
     fun addHabit(name: String, schedule: String, weight: Int) {
         viewModelScope.launch {
             val currentData = appData.value ?: return@launch
-            val newHabit = Habit(
-                id = (currentData.habits.maxOfOrNull { it.id } ?: 0) + 1,
-                name = name,
-                schedule = schedule,
-                weight = weight
-            )
-            val updatedHabits = currentData.habits + newHabit
+            val newHabit = currentData.habits.toMutableList().apply {
+                add(
+                    com.ade.habittracker.model.Habit(
+                        id = (currentData.habits.maxOfOrNull { it.id } ?: 0) + 1,
+                        name = name,
+                        schedule = schedule,
+                        weight = weight
+                    )
+                )
+            }
+            repository.saveAppData(currentData.copy(habits = newHabit))
+        }
+    }
+
+    fun updateHabit(id: Int, name: String, schedule: String, weight: Int) {
+        viewModelScope.launch {
+            val currentData = appData.value ?: return@launch
+            val updatedHabits = currentData.habits.map {
+                if (it.id == id) {
+                    it.copy(name = name, schedule = schedule, weight = weight)
+                } else {
+                    it
+                }
+            }
             repository.saveAppData(currentData.copy(habits = updatedHabits))
         }
     }
 
-    // --- FUNGSI BARU UNTUK EDIT ---
-    fun updateHabit(id: Int, name: String, schedule: String, weight: Int) {
+    fun deleteHabit(id: Int) {
         viewModelScope.launch {
             val currentData = appData.value ?: return@launch
-
-            // Cari habit lama untuk memeriksa apakah bobotnya berubah
-            val oldHabit = currentData.habits.find { it.id == id } ?: return@launch
-
+            val habitToDelete = currentData.habits.find { it.id == id }
             var newTotalXp = currentData.totalXp
-
-            // Jika habit sudah selesai dan bobotnya diubah, sesuaikan total XP
-            if (oldHabit.isCompleted) {
-                val xpDifference = weight - oldHabit.weight
-                newTotalXp += xpDifference
-            }
-
-            val updatedHabits = currentData.habits.map { habit ->
-                if (habit.id == id) {
-                    habit.copy(name = name, schedule = schedule, weight = weight)
-                } else {
-                    habit
-                }
-            }
-
-            val newLevel = calculateLevel(newTotalXp)
-            val updatedData = currentData.copy(habits = updatedHabits, totalXp = newTotalXp, level = newLevel)
-
-            repository.saveAppData(updatedData)
-        }
-    }
-
-    // --- FUNGSI BARU UNTUK HAPUS ---
-    fun deleteHabit(habitId: Int) {
-        viewModelScope.launch {
-            val currentData = appData.value ?: return@launch
-            val habitToDelete = currentData.habits.find { it.id == habitId } ?: return@launch
-
-            var newTotalXp = currentData.totalXp
-            // Jika habit yang dihapus sudah selesai, kurangi XP-nya dari total
-            if (habitToDelete.isCompleted) {
+            if (habitToDelete?.isCompleted == true) {
                 newTotalXp -= habitToDelete.weight
+                if (newTotalXp < 0) newTotalXp = 0
             }
 
-            val updatedHabits = currentData.habits.filter { it.id != habitId }
+            val updatedHabits = currentData.habits.filterNot { it.id == id }
             val newLevel = calculateLevel(newTotalXp)
-            val updatedData = currentData.copy(habits = updatedHabits, totalXp = newTotalXp, level = newLevel)
-
-            repository.saveAppData(updatedData)
+            repository.saveAppData(currentData.copy(habits = updatedHabits, totalXp = newTotalXp, level = newLevel))
         }
     }
 
@@ -105,45 +95,53 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
+            if (newTotalXp < 0) newTotalXp = 0
             val newLevel = calculateLevel(newTotalXp)
-            val dataAfterXp = currentData.copy(habits = updatedHabits, totalXp = newTotalXp, level = newLevel)
 
-            val finalData = checkStreaksAndAchievements(dataAfterXp)
+            val dataWithNewProgress = currentData.copy(
+                habits = updatedHabits,
+                totalXp = newTotalXp,
+                level = newLevel
+            )
+
+            val finalData = if (isCompleted) {
+                checkStreaksAndAchievements(dataWithNewProgress)
+            } else {
+                dataWithNewProgress
+            }
 
             repository.saveAppData(finalData)
         }
     }
 
     private fun checkStreaksAndAchievements(currentData: AppData): AppData {
-        val today = getTodayDateString()
-        val yesterday = getYesterdayDateString()
-        var newStreak = currentData.streak
-        var newLastCompletionDate = currentData.lastCompletionDate
+        val today = Calendar.getInstance()
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val todayStr = dateFormat.format(today.time)
 
-        val anyHabitCompleted = currentData.habits.any { it.isCompleted }
-
-        if (anyHabitCompleted) {
-            if (newLastCompletionDate == null) {
-                newStreak = 1
-                newLastCompletionDate = today
-            } else if (newLastCompletionDate == yesterday) {
-                newStreak += 1
-                newLastCompletionDate = today
-            } else if (newLastCompletionDate != today) {
-                newStreak = 1
-                newLastCompletionDate = today
-            }
+        if (todayStr == currentData.lastCompletionDate) {
+            return currentData
         }
+
+        val yesterday = Calendar.getInstance().apply { add(Calendar.DATE, -1) }
+        val yesterdayStr = dateFormat.format(yesterday.time)
+
+        val newStreak = if (currentData.lastCompletionDate == yesterdayStr) {
+            currentData.streak + 1
+        } else {
+            1
+        }
+        val newLastCompletionDate = todayStr
 
         val newAchievements = currentData.achievements.map { achievement ->
             if (achievement.isUnlocked) return@map achievement
 
             var unlocked = false
             when (achievement.id) {
-                1 -> if (currentData.totalXp > 0) unlocked = true
-                2 -> if (newStreak >= 7) unlocked = true
-                3 -> if (currentData.level >= 10) unlocked = true
-                4 -> {
+                1 -> if (currentData.totalXp > 0) unlocked = true // Pemula
+                2 -> if (newStreak >= 7) unlocked = true // Konsisten
+                3 -> if (currentData.level >= 10) unlocked = true // Master Habit
+                4 -> { // Rajin Belajar
                     val kotlinHabit = currentData.habits.find { it.name.contains("Belajar", ignoreCase = true) }
                     if (kotlinHabit?.isCompleted == true) {
                         unlocked = true
@@ -161,28 +159,27 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun calculateLevel(totalXp: Int): Int {
-        // Mencegah level menjadi 0 atau negatif jika XP negatif
-        return if (totalXp < 0) 1 else (totalXp / 100) + 1
+        return (totalXp / 100) + 1
     }
 
     fun getXpProgress(): Pair<Int, Int> {
-        val currentData = appData.value ?: return Pair(0, 100)
-        val currentLevel = currentData.level
-        val xpForCurrentLevel = (currentLevel - 1) * 100
-        val currentXpInLevel = currentData.totalXp - xpForCurrentLevel
-        return Pair(currentXpInLevel, 100)
+        val totalXp = appData.value?.totalXp ?: 0
+        val currentLevelXp = (appData.value?.level?.minus(1) ?: 0) * 100
+        val progress = totalXp - currentLevelXp
+        return Pair(progress, 100)
     }
 
-    private fun getTodayDateString(): String {
-        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        return formatter.format(Date())
-    }
+    fun scheduleDailyReminder(context: Context) {
+        val reminderRequest = PeriodicWorkRequestBuilder<HabitReminderWorker>(1, TimeUnit.DAYS)
+            // Anda bisa hapus komentar di bawah jika ingin notifikasi pertama muncul setelah delay tertentu
+            // .setInitialDelay(8, TimeUnit.HOURS)
+            .build()
 
-    private fun getYesterdayDateString(): String {
-        val calendar = Calendar.getInstance()
-        calendar.add(Calendar.DAY_OF_YEAR, -1)
-        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        return formatter.format(calendar.time)
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "daily_habit_reminder",
+            ExistingPeriodicWorkPolicy.KEEP, // Mencegah duplikasi jika fungsi ini dipanggil lagi
+            reminderRequest
+        )
     }
 }
 

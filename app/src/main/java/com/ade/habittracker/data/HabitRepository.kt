@@ -1,30 +1,34 @@
 package com.ade.habittracker.data
 
-import android.app.Application
+import android.content.Context
 import com.ade.habittracker.model.Achievement
 import com.ade.habittracker.model.AppData
 import com.ade.habittracker.model.Habit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
-class HabitRepository(application: Application) {
-    private val dataStoreManager = DataStoreManager(application)
+class HabitRepository(context: Context) {
+
+    // Memanggil getInstance() untuk memastikan kita hanya punya SATU instance DataStoreManager
+    // di seluruh aplikasi. Ini sangat penting untuk mencegah bug.
+    private val dataStoreManager = DataStoreManager.getInstance(context.applicationContext)
 
     // Menggabungkan dua flow (data utama & tanggal terakhir) menjadi satu sumber data yang utuh
-    val appDataFlow: Flow<AppData?> = combine(
-        dataStoreManager.appDataFlow,
+    val appData: Flow<AppData?> = combine(
+        dataStoreManager.appDataJsonFlow,
         dataStoreManager.lastCompletionDateFlow
     ) { appDataJson, lastCompletionDate ->
-        if (appDataJson != null) {
-            // Gabungkan data JSON dengan data tanggal
-            Json.decodeFromString<AppData>(appDataJson).copy(
-                lastCompletionDate = lastCompletionDate?.takeIf { it.isNotBlank() }
-            )
+        val appData = if (appDataJson != null) {
+            // Jika ada data JSON, kita decode.
+            Json.decodeFromString<AppData>(appDataJson)
         } else {
-            // Jika tidak ada data sama sekali, berikan data default
+            // Jika tidak ada data sama sekali (first run), panggil fungsi getDefaultAppData().
             getDefaultAppData()
         }
+        // Selalu perbarui lastCompletionDate di data yang akan dikirim ke ViewModel
+        appData.copy(lastCompletionDate = lastCompletionDate)
     }
 
     // Fungsi untuk menyimpan data, hanya meneruskan ke DataStoreManager
@@ -32,8 +36,8 @@ class HabitRepository(application: Application) {
         dataStoreManager.saveAppData(appData)
     }
 
+    // Logika untuk menyediakan data awal saat aplikasi pertama kali dijalankan.
     private fun getDefaultAppData(): AppData {
-        // Data awal saat aplikasi pertama kali dijalankan
         val defaultHabits = listOf(
             Habit(id = 1, name = "Baca Buku 30 Menit", schedule = "Setiap Hari", weight = 50),
             Habit(id = 2, name = "Olahraga Pagi", schedule = "Senin, Rabu, Jumat", weight = 40),
@@ -49,7 +53,7 @@ class HabitRepository(application: Application) {
         return AppData(
             habits = defaultHabits,
             achievements = defaultAchievements,
-            totalXp = 80, // Sesuai dengan habit default yang sudah selesai
+            totalXp = 50, // Dihitung dari habit default yang sudah selesai (30+20)
             level = 1,
             streak = 0,
             lastCompletionDate = null

@@ -1,8 +1,12 @@
 package com.ade.habittracker
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
@@ -20,6 +24,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,7 +32,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,11 +60,41 @@ val AccentYellow = Color(0xFFFFCC00)
 
 class MainActivity : ComponentActivity() {
     private val viewModel: HabitViewModel by viewModels()
+
+    // Logic untuk meminta izin notifikasi
+    private val requestPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+            if (isGranted) {
+                // Izin diberikan, jadwalkan notifikasi
+                viewModel.scheduleDailyReminder(applicationContext)
+                Toast.makeText(this, "Pengingat harian diaktifkan!", Toast.LENGTH_SHORT).show()
+            } else {
+                // Izin ditolak
+                Toast.makeText(this, "Izin notifikasi ditolak.", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+    private fun askNotificationPermission() {
+        // Hanya perlu untuk Android 13 (TIRAMISU) ke atas
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            // Untuk versi Android lebih lama, izin sudah ada secara default
+            viewModel.scheduleDailyReminder(applicationContext)
+            Toast.makeText(this, "Pengingat harian diaktifkan!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             HabitTrackerTheme {
-                MainScreen(viewModel)
+                MainScreen(
+                    viewModel = viewModel,
+                    onScheduleReminderClick = {
+                        askNotificationPermission()
+                    }
+                )
             }
         }
     }
@@ -65,7 +102,10 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: HabitViewModel) {
+fun MainScreen(
+    viewModel: HabitViewModel,
+    onScheduleReminderClick: () -> Unit
+) {
     val navController = rememberNavController()
     var showBottomSheet by remember { mutableStateOf(false) }
     var habitToEdit by remember { mutableStateOf<Habit?>(null) }
@@ -100,7 +140,8 @@ fun MainScreen(viewModel: HabitViewModel) {
             },
             onDeleteClick = { habit ->
                 habitToDelete = habit
-            }
+            },
+            onScheduleReminderClick = onScheduleReminderClick
         )
     }
 
@@ -150,7 +191,8 @@ fun AppNavHost(
     modifier: Modifier = Modifier,
     viewModel: HabitViewModel,
     onEditClick: (Habit) -> Unit,
-    onDeleteClick: (Habit) -> Unit
+    onDeleteClick: (Habit) -> Unit,
+    onScheduleReminderClick: () -> Unit
 ) {
     val appData by viewModel.appData.collectAsStateWithLifecycle()
 
@@ -176,7 +218,8 @@ fun AppNavHost(
                 streak = appData?.streak ?: 0,
                 totalXp = appData?.totalXp ?: 0,
                 xpProgress = xpProgress,
-                maxXp = max
+                maxXp = max,
+                onScheduleReminderClick = onScheduleReminderClick
             )
         }
         composable("achievements") {
@@ -309,7 +352,14 @@ fun HabitItem(
 
 
 @Composable
-fun StatsScreen(level: Int, streak: Int, totalXp: Int, xpProgress: Int, maxXp: Int) {
+fun StatsScreen(
+    level: Int,
+    streak: Int,
+    totalXp: Int,
+    xpProgress: Int,
+    maxXp: Int,
+    onScheduleReminderClick: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -344,7 +394,7 @@ fun StatsScreen(level: Int, streak: Int, totalXp: Int, xpProgress: Int, maxXp: I
             }
         }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -353,6 +403,30 @@ fun StatsScreen(level: Int, streak: Int, totalXp: Int, xpProgress: Int, maxXp: I
             StatCard(title = "STREAK", value = "$streak HARI", icon = Icons.Default.CheckCircle, iconColor = Color.Red)
             StatCard(title = "TOTAL XP", value = "$totalXp", icon = Icons.Default.Star, iconColor = AccentYellow)
         }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Tombol untuk mengaktifkan notifikasi
+        Button(
+            onClick = onScheduleReminderClick,
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = CardBackground),
+            border = BorderStroke(1.dp, PrimaryColor),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Notifications, contentDescription = "Notifikasi", tint = PrimaryColor)
+                Spacer(Modifier.width(8.dp))
+                Text("Aktifkan Pengingat Harian", color = PrimaryColor)
+            }
+        }
+        Text(
+            "Anda akan diingatkan setiap hari.",
+            color = TextColorSecondary,
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 
@@ -524,11 +598,11 @@ fun AddHabitBottomSheetContent(
         )
         OutlinedTextField(
             value = name,
-            onValueChange = { newName -> name = newName }, // DIGANTI DARI 'it'
+            onValueChange = { newName -> name = newName },
             label = { Text("Nama Misi") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            colors = TextFieldDefaults.colors( // MENGGUNAKAN .colors() YANG BARU
+            colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
                 focusedIndicatorColor = PrimaryColor,
@@ -543,11 +617,11 @@ fun AddHabitBottomSheetContent(
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = schedule,
-            onValueChange = { newSchedule -> schedule = newSchedule }, // DIGANTI DARI 'it'
+            onValueChange = { newSchedule -> schedule = newSchedule },
             label = { Text("Jadwal (cth: Setiap Hari, Senin)") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            colors = TextFieldDefaults.colors( // MENGGUNAKAN .colors() YANG BARU
+            colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
                 focusedIndicatorColor = PrimaryColor,
@@ -562,11 +636,11 @@ fun AddHabitBottomSheetContent(
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = weight,
-            onValueChange = { newWeight -> weight = newWeight.filter { char -> char.isDigit() } }, // DIGANTI DARI 'it'
+            onValueChange = { newWeight -> weight = newWeight.filter { char -> char.isDigit() } },
             label = { Text("Bobot (XP)") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            colors = TextFieldDefaults.colors( // MENGGUNAKAN .colors() YANG BARU
+            colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
                 focusedIndicatorColor = PrimaryColor,

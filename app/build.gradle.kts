@@ -72,4 +72,7 @@ dependencies {
 // Kotlinx Serialization for JSON
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
 }
