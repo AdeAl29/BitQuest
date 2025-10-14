@@ -11,11 +11,10 @@ import kotlinx.serialization.json.Json
 
 class HabitRepository(context: Context) {
 
-    // Memanggil getInstance() untuk memastikan kita hanya punya SATU instance DataStoreManager
-    // di seluruh aplikasi. Ini sangat penting untuk mencegah bug.
+    // Menggunakan Singleton pattern untuk DataStoreManager
     private val dataStoreManager = DataStoreManager.getInstance(context.applicationContext)
 
-    // Menggabungkan dua flow (data utama & tanggal terakhir) menjadi satu sumber data yang utuh
+    // Menggabungkan flow menjadi satu sumber data yang utuh
     val appData: Flow<AppData?> = combine(
         dataStoreManager.appDataJsonFlow,
         dataStoreManager.lastCompletionDateFlow
@@ -31,18 +30,19 @@ class HabitRepository(context: Context) {
         appData.copy(lastCompletionDate = lastCompletionDate)
     }
 
-    // Fungsi untuk menyimpan data, hanya meneruskan ke DataStoreManager
     suspend fun saveAppData(appData: AppData) {
         dataStoreManager.saveAppData(appData)
     }
 
-    // Logika untuk menyediakan data awal saat aplikasi pertama kali dijalankan.
+    // --- DI SINI KITA MENGUBAH DATA AWAL ---
     private fun getDefaultAppData(): AppData {
         val defaultHabits = listOf(
             Habit(id = 1, name = "Baca Buku 30 Menit", schedule = "Setiap Hari", weight = 50),
             Habit(id = 2, name = "Olahraga Pagi", schedule = "Senin, Rabu, Jumat", weight = 40),
-            Habit(id = 3, name = "Belajar Kotlin", schedule = "Setiap Hari", weight = 30, isCompleted = true),
-            Habit(id = 4, name = "Minum 8 Gelas Air", schedule = "Setiap Hari", weight = 20, isCompleted = true)
+            // DIUBAH: Properti isCompleted = true dihapus
+            Habit(id = 3, name = "Belajar Kotlin", schedule = "Setiap Hari", weight = 30),
+            // DIUBAH: Properti isCompleted = true dihapus
+            Habit(id = 4, name = "Minum 8 Gelas Air", schedule = "Setiap Hari", weight = 20)
         )
         val defaultAchievements = listOf(
             Achievement(id = 1, title = "Pemula", description = "Menyelesaikan habit pertama kali."),
@@ -53,7 +53,8 @@ class HabitRepository(context: Context) {
         return AppData(
             habits = defaultHabits,
             achievements = defaultAchievements,
-            totalXp = 50, // Dihitung dari habit default yang sudah selesai (30+20)
+            // DIRESET: Total XP dimulai dari 0
+            totalXp = 0,
             level = 1,
             streak = 0,
             lastCompletionDate = null
