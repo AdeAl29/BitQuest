@@ -34,14 +34,11 @@ class HabitRepository(context: Context) {
         dataStoreManager.saveAppData(appData)
     }
 
-    // --- DI SINI KITA MENGUBAH DATA AWAL ---
     private fun getDefaultAppData(): AppData {
         val defaultHabits = listOf(
             Habit(id = 1, name = "Baca Buku 30 Menit", schedule = "Setiap Hari", weight = 50),
             Habit(id = 2, name = "Olahraga Pagi", schedule = "Senin, Rabu, Jumat", weight = 40),
-            // DIUBAH: Properti isCompleted = true dihapus
             Habit(id = 3, name = "Belajar Kotlin", schedule = "Setiap Hari", weight = 30),
-            // DIUBAH: Properti isCompleted = true dihapus
             Habit(id = 4, name = "Minum 8 Gelas Air", schedule = "Setiap Hari", weight = 20)
         )
         val defaultAchievements = listOf(
@@ -53,10 +50,12 @@ class HabitRepository(context: Context) {
         return AppData(
             habits = defaultHabits,
             achievements = defaultAchievements,
-            // DIRESET: Total XP dimulai dari 0
             totalXp = 0,
             level = 1,
             streak = 0,
+            // --- DI SINI PERUBAHANNYA ---
+            // Menambahkan lastResetDate agar struktur data lengkap
+            lastResetDate = null,
             lastCompletionDate = null
         )
     }

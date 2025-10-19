@@ -18,20 +18,44 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
-// 1. Ganti ViewModel menjadi AndroidViewModel untuk mendapatkan 'application' context
 class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
-    // 2. Berikan 'application.applicationContext' saat membuat repository
     private val repository = HabitRepository(application.applicationContext)
 
-    // 3. Baris ini sekarang akan berfungsi dengan benar
     val appData: StateFlow<AppData?> = repository.appData.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = null
     )
 
-    // --- SISA KODE DI BAWAH INI SAMA PERSIS DENGAN YANG ANDA BERIKAN ---
+    // --- FUNGSI BARU UNTUK LOGIKA RESET HARIAN ---
+    // Fungsi ini akan dipanggil dari MainActivity saat aplikasi pertama kali dibuka.
+    fun resetHabitsIfNewDay() {
+        viewModelScope.launch {
+            // Ambil data saat ini, jika tidak ada, hentikan.
+            val currentData = appData.value ?: return@launch
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val todayStr = dateFormat.format(Date())
+
+            // Cek: Apakah tanggal reset terakhir BUKAN hari ini?
+            if (currentData.lastResetDate != todayStr) {
+                // Jika ya, buat daftar habit baru dengan semua 'isCompleted' di-set ke false.
+                val resetHabits = currentData.habits.map { it.copy(isCompleted = false) }
+
+                // Buat data baru dengan habit yang sudah direset dan tanggal reset yang baru.
+                // PENTING: Poin, level, streak, dan achievement TIDAK diubah!
+                val newData = currentData.copy(
+                    habits = resetHabits,
+                    lastResetDate = todayStr
+                )
+                // Simpan data yang sudah diperbarui ke DataStore.
+                repository.saveAppData(newData)
+            }
+            // Jika tanggalnya sama, tidak ada yang perlu dilakukan.
+        }
+    }
+    // ---------------------------------------------
+
 
     fun addHabit(name: String, schedule: String, weight: Int) {
         viewModelScope.launch {

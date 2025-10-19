@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
@@ -34,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +59,7 @@ val PrimaryColor = Color(0xFF0A84FF) // Biru cerah
 val TextColorPrimary = Color(0xFFFFFFFF)
 val TextColorSecondary = Color(0xFF8E8E93)
 val AccentYellow = Color(0xFFFFCC00)
+val ErrorColor = Color(0xFFFF453A)
 
 class MainActivity : ComponentActivity() {
     private val viewModel: HabitViewModel by viewModels()
@@ -106,6 +109,14 @@ fun MainScreen(
     viewModel: HabitViewModel,
     onScheduleReminderClick: () -> Unit
 ) {
+    // --- DI SINI PERUBAHANNYA ---
+    // LaunchedEffect akan menjalankan blok kode ini satu kali
+    // saat MainScreen pertama kali ditampilkan/dibuka.
+    LaunchedEffect(Unit) {
+        viewModel.resetHabitsIfNewDay()
+    }
+    // ---------------------------
+
     val navController = rememberNavController()
     var showBottomSheet by remember { mutableStateOf(false) }
     var habitToEdit by remember { mutableStateOf<Habit?>(null) }
@@ -376,7 +387,7 @@ fun StatsScreen(
 
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(200.dp)) {
             CircularProgressIndicator(
-                progress = xpProgress.toFloat() / maxXp.toFloat(),
+                progress = { (xpProgress.toFloat() / maxXp.toFloat()) },
                 modifier = Modifier.fillMaxSize(),
                 strokeWidth = 12.dp,
                 color = AccentYellow,
@@ -404,9 +415,8 @@ fun StatsScreen(
             StatCard(title = "TOTAL XP", value = "$totalXp", icon = Icons.Default.Star, iconColor = AccentYellow)
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.weight(1f))
 
-        // Tombol untuk mengaktifkan notifikasi
         Button(
             onClick = onScheduleReminderClick,
             shape = RoundedCornerShape(16.dp),
@@ -581,7 +591,12 @@ fun AddHabitBottomSheetContent(
         }
     }
 
-    val isFormValid = name.isNotBlank() && schedule.isNotBlank() && weight.toIntOrNull() != null
+    val weightValue = weight.toIntOrNull()
+    val isWeightError = weight.isNotEmpty() && (weightValue == null || weightValue !in 1..100)
+    val isFormValid = name.isNotBlank() &&
+            schedule.isNotBlank() &&
+            weight.isNotEmpty() &&
+            !isWeightError
 
     Column(
         modifier = Modifier
@@ -636,10 +651,24 @@ fun AddHabitBottomSheetContent(
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = weight,
-            onValueChange = { newWeight -> weight = newWeight.filter { char -> char.isDigit() } },
-            label = { Text("Bobot (XP)") },
+            onValueChange = { newValue ->
+                val filteredValue = newValue.filter { it.isDigit() }
+                if (filteredValue.isEmpty() || (filteredValue.toIntOrNull() ?: 0) <= 100) {
+                    weight = filteredValue
+                }
+            },
+            label = { Text("Bobot (XP 1-100)") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            isError = isWeightError,
+            supportingText = {
+                if (isWeightError) {
+                    Text("XP harus antara 1-100", color = ErrorColor)
+                } else {
+                    Text("Masukkan bobot antara 1-100", color = TextColorSecondary)
+                }
+            },
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
@@ -649,7 +678,11 @@ fun AddHabitBottomSheetContent(
                 focusedTextColor = TextColorPrimary,
                 unfocusedTextColor = TextColorPrimary,
                 focusedLabelColor = PrimaryColor,
-                unfocusedLabelColor = TextColorSecondary
+                unfocusedLabelColor = TextColorSecondary,
+                errorCursorColor = ErrorColor,
+                errorIndicatorColor = ErrorColor,
+                errorSupportingTextColor = ErrorColor,
+                errorLabelColor = ErrorColor
             )
         )
         Spacer(Modifier.height(24.dp))

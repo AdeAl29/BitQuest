@@ -5,7 +5,6 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-// Anotasi @Serializable memberitahu library cara mengubah objek ini
 @Serializable
 data class Habit(
     val id: Int,
@@ -30,15 +29,16 @@ data class AppData(
     val totalXp: Int = 0,
     val level: Int = 1,
     val streak: Int = 0,
-    // Kita buat non-serializable agar tidak disimpan dalam JSON utama, karena sudah disimpan terpisah
+    // --- DI SINI PERUBAHANNYA ---
+    // Properti baru ditambahkan untuk melacak tanggal reset terakhir
+    val lastResetDate: String? = null,
+    // ----------------------------
     @kotlinx.serialization.Transient
     val lastCompletionDate: String? = null
 ) {
-    // --- INI FUNGSI .toJson() YANG HILANG ---
     fun toJson(): String = Json.encodeToString(this)
 
     companion object {
-        // Fungsi untuk membuat objek dari String JSON
         fun fromJson(jsonString: String): AppData = Json.decodeFromString(jsonString)
     }
 }
