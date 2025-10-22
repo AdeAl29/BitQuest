@@ -56,7 +56,6 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     }
     // ---------------------------------------------
 
-
     fun addHabit(name: String, schedule: String, weight: Int) {
         viewModelScope.launch {
             val currentData = appData.value ?: return@launch

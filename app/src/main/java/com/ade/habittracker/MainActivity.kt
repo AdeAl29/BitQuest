@@ -588,6 +588,11 @@ fun AddHabitBottomSheetContent(
             name = habitToEdit.name
             schedule = habitToEdit.schedule
             weight = habitToEdit.weight.toString()
+        } else {
+            // Pastikan form kosong saat mode tambah
+            name = ""
+            schedule = ""
+            weight = ""
         }
     }
 

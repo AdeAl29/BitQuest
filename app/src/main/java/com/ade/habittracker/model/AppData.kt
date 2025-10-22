@@ -29,10 +29,8 @@ data class AppData(
     val totalXp: Int = 0,
     val level: Int = 1,
     val streak: Int = 0,
-    // --- DI SINI PERUBAHANNYA ---
-    // Properti baru ditambahkan untuk melacak tanggal reset terakhir
+    // BARU: Properti untuk melacak tanggal reset terakhir
     val lastResetDate: String? = null,
-    // ----------------------------
     @kotlinx.serialization.Transient
     val lastCompletionDate: String? = null
 ) {
