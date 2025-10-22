@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "427810463121",
+    "project_id": "bitquest-b95c8",
+    "storage_bucket": "bitquest-b95c8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:427810463121:android:ad5d7bfd7106b1d3c88e30",
+        "android_client_info": {
+          "package_name": "com.ade.habittracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoGcR02rB2fB_x0runASyOYO7VQZ41DUQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

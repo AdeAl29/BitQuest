@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("org.jetbrains.kotlin.plugin.serialization") version "1.9.23"
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -81,5 +82,10 @@ dependencies {
 
     // Splash Screen API
     implementation("androidx.core:core-splashscreen:1.0.1")
+    // Firebase Bill of Materials (BoM)
+    implementation(platform("com.google.firebase:firebase-bom:33.0.0"))
+    // Firebase Libraries
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
 
 }

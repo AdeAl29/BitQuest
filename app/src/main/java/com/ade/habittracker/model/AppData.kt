@@ -1,45 +1,39 @@
 package com.ade.habittracker.model
 
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+// Import kotlinx.serialization TIDAK diperlukan lagi
 
-@Serializable
+// Data class untuk Habit (Model yang digunakan di ViewModel dan UI)
 data class Habit(
-    val id: Int,
+    // ID String dari Firestore, WAJIB ADA.
+    val firestoreId: String,
+    // ID Integer bisa digunakan untuk UI (misal key di LazyColumn), dibuat dari hashCode.
+    // Jika tidak perlu, bisa dihapus.
+    val id: Int = firestoreId.hashCode(),
     val name: String,
     val schedule: String,
     val weight: Int,
     val isCompleted: Boolean = false
 )
 
-@Serializable
+// Data class untuk Achievement (Model UI)
 data class Achievement(
-    val id: Int,
+    val id: Int, // ID Achievement bisa tetap Int
     val title: String,
     val description: String,
     val isUnlocked: Boolean = false
 )
 
-@Serializable
+// Data class utama yang MENGGABUNGKAN semua state aplikasi untuk UI
+// Data ini dirakit di ViewModel dari sumber data Firestore.
 data class AppData(
-    val habits: List<Habit> = emptyList(),
-    val achievements: List<Achievement> = emptyList(),
+    val habits: List<Habit> = emptyList(), // Menggunakan model Habit versi baru
+    val achievements: List<Achievement> = emptyList(), // List achievement (bisa dari default/Firestore)
+    // Statistik ini diambil dari UserData di Firestore
     val totalXp: Int = 0,
     val level: Int = 1,
     val streak: Int = 0,
-    // --- DI SINI PERUBAHANNYA ---
-    // Properti baru ditambahkan untuk melacak tanggal reset terakhir
     val lastResetDate: String? = null,
-    // ----------------------------
-    @kotlinx.serialization.Transient
     val lastCompletionDate: String? = null
-) {
-    fun toJson(): String = Json.encodeToString(this)
-
-    companion object {
-        fun fromJson(jsonString: String): AppData = Json.decodeFromString(jsonString)
-    }
-}
+    // Fungsi toJson/fromJson dihapus
+)
 
