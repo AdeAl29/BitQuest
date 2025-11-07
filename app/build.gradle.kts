@@ -82,4 +82,9 @@ dependencies {
     // Splash Screen API
     implementation("androidx.core:core-splashscreen:1.0.1")
 
+    // Coil for image loading
+    implementation("io.coil-kt:coil-compose:2.5.0") // Cek versi terbaru jika perlu
+
+    // Di dalam blok dependencies { ... }
+    implementation("io.coil-kt:coil-compose:2.6.0") // Gunakan versi terbaru
 }

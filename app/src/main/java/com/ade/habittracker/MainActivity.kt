@@ -1,8 +1,10 @@
 package com.ade.habittracker
 
 import android.Manifest
+import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -64,25 +67,76 @@ val ErrorColor = Color(0xFFFF453A)
 class MainActivity : ComponentActivity() {
     private val viewModel: HabitViewModel by viewModels()
 
+    // --- LOGIKA MUSIK LATAR ---
+    private var mediaPlayer: MediaPlayer? = null
+
+    // Fungsi untuk memulai musik
+    private fun startBackgroundMusic() {
+        if (mediaPlayer == null) {
+            // Ganti R.raw.sountrack dengan nama file Anda
+            mediaPlayer = MediaPlayer.create(this, R.raw.sountrack)
+            mediaPlayer?.isLooping = true
+            mediaPlayer?.setVolume(0.5f, 0.5f)
+        }
+        try {
+            if (mediaPlayer?.isPlaying == false) {
+                mediaPlayer?.start()
+            }
+        } catch (e: IllegalStateException) {
+            Log.e("MainActivityMusic", "Error starting MediaPlayer: ${e.message}")
+            releaseMediaPlayer()
+            mediaPlayer = MediaPlayer.create(this, R.raw.sountrack) // Sesuaikan nama file
+            mediaPlayer?.isLooping = true
+            mediaPlayer?.setVolume(0.5f, 0.5f)
+            mediaPlayer?.start()
+        }
+    }
+
+    // Fungsi untuk menghentikan sementara musik (saat app ke background)
+    private fun pauseBackgroundMusic() {
+        if (mediaPlayer?.isPlaying == true) {
+            mediaPlayer?.pause()
+        }
+    }
+
+    // Fungsi untuk melepaskan resource MediaPlayer (saat app ditutup)
+    private fun releaseMediaPlayer() {
+        mediaPlayer?.stop()
+        mediaPlayer?.release()
+        mediaPlayer = null
+    }
+
+    // --- Lifecycle Callbacks untuk Musik ---
+    override fun onStart() {
+        super.onStart()
+        startBackgroundMusic()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        pauseBackgroundMusic()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        releaseMediaPlayer()
+    }
+
     // Logic untuk meminta izin notifikasi
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
-                // Izin diberikan, jadwalkan notifikasi
                 viewModel.scheduleDailyReminder(applicationContext)
                 Toast.makeText(this, "Pengingat harian diaktifkan!", Toast.LENGTH_SHORT).show()
             } else {
-                // Izin ditolak
                 Toast.makeText(this, "Izin notifikasi ditolak.", Toast.LENGTH_SHORT).show()
             }
         }
 
     private fun askNotificationPermission() {
-        // Hanya perlu untuk Android 13 (TIRAMISU) ke atas
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            // Untuk versi Android lebih lama, izin sudah ada secara default
             viewModel.scheduleDailyReminder(applicationContext)
             Toast.makeText(this, "Pengingat harian diaktifkan!", Toast.LENGTH_SHORT).show()
         }
@@ -103,22 +157,68 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// BARU: Struktur data untuk template misi
+data class HabitTemplate(val name: String, val schedule: String, val weight: Int)
+
+// BARU: Daftar template misi yang sudah jadi dengan XP yang ditentukan
+val predefinedHabitTemplates = listOf(
+    // Kategori: Kesehatan Fisik
+    "Kesehatan Fisik" to listOf(
+        HabitTemplate("Minum 8 gelas air", "Setiap Hari", 10),
+        HabitTemplate("Olahraga 30 menit", "Setiap Hari", 30),
+        HabitTemplate("Tidur 7-8 jam", "Setiap Hari", 25),
+        HabitTemplate("Makan sayur & buah", "Setiap Hari", 15),
+        HabitTemplate("Tidak merokok", "Setiap Hari", 50),
+        HabitTemplate("Jalan kaki 10.000 langkah", "Setiap Hari", 40),
+        HabitTemplate("Tidak makan junk food", "Setiap Hari", 20),
+        HabitTemplate("Sarapan sehat", "Setiap Hari", 15)
+    ),
+    // Kategori: Kesehatan Mental & Produktivitas
+    "Produktivitas & Mental" to listOf(
+        HabitTemplate("Meditasi 10 menit", "Setiap Hari", 20),
+        HabitTemplate("Membaca buku 20 menit", "Setiap Hari", 20),
+        HabitTemplate("Belajar hal baru 30 menit", "Setiap Hari", 30),
+        HabitTemplate("Merencanakan hari (To-Do List)", "Setiap Pagi", 10),
+        HabitTemplate("Tidak main medsos 1 jam sebelum tidur", "Setiap Malam", 25),
+        HabitTemplate("Bangun pagi (sebelum jam 6)", "Setiap Pagi", 20),
+        HabitTemplate("Menulis jurnal", "Setiap Hari", 15),
+        HabitTemplate("Berlatih bersyukur", "Setiap Hari", 15)
+    ),
+    // Kategori: Keterampilan & Hobi
+    "Keterampilan & Hobi" to listOf(
+        HabitTemplate("Latihan coding 1 jam", "Setiap Hari", 35),
+        HabitTemplate("Berlatih alat musik 30 menit", "Setiap Hari", 25),
+        HabitTemplate("Menggambar/Melukis 30 menit", "Setiap Hari", 20),
+        HabitTemplate("Belajar bahasa baru 20 menit", "Setiap Hari", 25),
+        HabitTemplate("Menulis 500 kata", "Setiap Hari", 30)
+    ),
+    // Kategori: Tugas & Kebersihan
+    "Tugas & Kebersihan" to listOf(
+        HabitTemplate("Membersihkan/Merapikan kamar", "Setiap Hari", 20),
+        HabitTemplate("Cuci piring", "Setiap Hari", 10),
+        HabitTemplate("Menyelesaikan tugas utama", "Setiap Hari", 40),
+        HabitTemplate("Membuang sampah", "Setiap Hari", 5)
+    )
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: HabitViewModel,
     onScheduleReminderClick: () -> Unit
 ) {
-    // --- DI SINI PERUBAHANNYA ---
-    // LaunchedEffect akan menjalankan blok kode ini satu kali
-    // saat MainScreen pertama kali ditampilkan/dibuka.
     LaunchedEffect(Unit) {
         viewModel.resetHabitsIfNewDay()
     }
-    // ---------------------------
 
     val navController = rememberNavController()
-    var showBottomSheet by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // State untuk mengontrol 3 bottom sheet
+    var showAddOptionsSheet by remember { mutableStateOf(false) } // Pilihan (manual/template)
+    var showManualAddSheet by remember { mutableStateOf(false) }  // Form manual
+    var showTemplateSheet by remember { mutableStateOf(false) }   // Daftar template
+
     var habitToEdit by remember { mutableStateOf<Habit?>(null) }
     var habitToDelete by remember { mutableStateOf<Habit?>(null) }
 
@@ -130,8 +230,8 @@ fun MainScreen(
             if (currentRoute == "habits") {
                 FloatingActionButton(
                     onClick = {
-                        habitToEdit = null // Pastikan mode tambah baru, bukan edit
-                        showBottomSheet = true
+                        // Tampilkan sheet pilihan
+                        showAddOptionsSheet = true
                     },
                     containerColor = PrimaryColor,
                     contentColor = Color.White
@@ -147,7 +247,8 @@ fun MainScreen(
             viewModel = viewModel,
             onEditClick = { habit ->
                 habitToEdit = habit
-                showBottomSheet = true
+                // Edit langsung buka sheet manual
+                showManualAddSheet = true
             },
             onDeleteClick = { habit ->
                 habitToDelete = habit
@@ -156,14 +257,39 @@ fun MainScreen(
         )
     }
 
-    if (showBottomSheet) {
-        val scope = rememberCoroutineScope()
+    // Bottom Sheet 1 (Pilihan)
+    if (showAddOptionsSheet) {
         ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false },
+            onDismissRequest = { showAddOptionsSheet = false },
             sheetState = rememberModalBottomSheetState(),
             containerColor = CardBackground
         ) {
-            AddHabitBottomSheetContent(
+            AddOptionsSheet(
+                onManualAddClick = {
+                    scope.launch {
+                        showAddOptionsSheet = false
+                        habitToEdit = null // Pastikan mode tambah baru
+                        showManualAddSheet = true
+                    }
+                },
+                onTemplateAddClick = {
+                    scope.launch {
+                        showAddOptionsSheet = false
+                        showTemplateSheet = true
+                    }
+                }
+            )
+        }
+    }
+
+    // Bottom Sheet 2 (Form Manual)
+    if (showManualAddSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showManualAddSheet = false },
+            sheetState = rememberModalBottomSheetState(),
+            containerColor = CardBackground
+        ) {
+            ManualAddHabitSheet(
                 habitToEdit = habitToEdit,
                 onConfirm = { name, schedule, weight ->
                     scope.launch {
@@ -172,15 +298,35 @@ fun MainScreen(
                         } else {
                             viewModel.updateHabit(habitToEdit!!.id, name, schedule, weight)
                         }
-                        showBottomSheet = false
+                        showManualAddSheet = false
                     }
                 },
                 onCancel = {
-                    scope.launch { showBottomSheet = false }
+                    scope.launch { showManualAddSheet = false }
                 }
             )
         }
     }
+
+    // Bottom Sheet 3 (Daftar Template)
+    if (showTemplateSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showTemplateSheet = false },
+            sheetState = rememberModalBottomSheetState(),
+            containerColor = DarkBackground // Pakai background utama
+        ) {
+            TemplateHabitSheet(
+                templates = predefinedHabitTemplates,
+                onTemplateClick = { template ->
+                    scope.launch {
+                        viewModel.addHabit(template.name, template.schedule, template.weight)
+                    }
+                    Toast.makeText(navController.context, "${template.name} ditambahkan!", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+    }
+
 
     if (habitToDelete != null) {
         DeleteConfirmationDialog(
@@ -441,7 +587,7 @@ fun StatsScreen(
 }
 
 @Composable
-fun StatCard(title: String, value: String, icon: androidx.compose.ui.graphics.vector.ImageVector, iconColor: Color) {
+fun StatCard(title: String, value: String, icon: ImageVector, iconColor: Color) {
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CardBackground),
@@ -570,11 +716,136 @@ fun BottomNavigationBar(navController: NavController) {
     }
 }
 
-data class NavigationItem(val route: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: String)
+data class NavigationItem(val route: String, val icon: ImageVector, val title: String)
+
+@Composable
+fun AddOptionsSheet(
+    onManualAddClick: () -> Unit,
+    onTemplateAddClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "Tambah Misi",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = TextColorPrimary,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
+
+        Button(
+            onClick = onTemplateAddClick,
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp)
+        ) {
+            Text("Pilih dari Template", fontSize = 16.sp)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = onManualAddClick,
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = CardBackground),
+            border = BorderStroke(1.dp, PrimaryColor),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp)
+        ) {
+            Text("Buat Misi Sendiri (Manual)", color = PrimaryColor, fontSize = 16.sp)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+fun TemplateHabitSheet(
+    templates: List<Pair<String, List<HabitTemplate>>>,
+    onTemplateClick: (HabitTemplate) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize() // Mengisi ruang bottom sheet
+            .padding(horizontal = 16.dp)
+    ) {
+        item {
+            Text(
+                text = "Pilih Misi dari Template",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextColorPrimary,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
+        }
+
+        templates.forEach { (category, habitList) ->
+            item {
+                Text(
+                    text = category.uppercase(),
+                    color = TextColorSecondary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                )
+            }
+
+            items(habitList, key = { it.name }) { template ->
+                HabitTemplateItem(
+                    template = template,
+                    onClick = { onTemplateClick(template) }
+                )
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(32.dp)) // Spacer di akhir
+        }
+    }
+}
+
+@Composable
+fun HabitTemplateItem(
+    template: HabitTemplate,
+    onClick: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(template.name, color = TextColorPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(template.schedule, color = TextColorSecondary, fontSize = 12.sp)
+            }
+            Spacer(Modifier.width(16.dp))
+            Text(
+                "+${template.weight} XP",
+                color = AccentYellow,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddHabitBottomSheetContent(
+fun ManualAddHabitSheet(
     habitToEdit: Habit?,
     onConfirm: (String, String, Int) -> Unit,
     onCancel: () -> Unit
@@ -589,7 +860,6 @@ fun AddHabitBottomSheetContent(
             schedule = habitToEdit.schedule
             weight = habitToEdit.weight.toString()
         } else {
-            // Pastikan form kosong saat mode tambah
             name = ""
             schedule = ""
             weight = ""
@@ -610,7 +880,7 @@ fun AddHabitBottomSheetContent(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = if (habitToEdit == null) "Tambah Misi Baru" else "Edit Misi",
+            text = if (habitToEdit == null) "Tambah Misi Manual" else "Edit Misi",
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = TextColorPrimary,
@@ -736,4 +1006,3 @@ fun DeleteConfirmationDialog(
         containerColor = CardBackground
     )
 }
-
