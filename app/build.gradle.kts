@@ -87,4 +87,6 @@ dependencies {
 
     // Di dalam blok dependencies { ... }
     implementation("io.coil-kt:coil-compose:2.6.0") // Gunakan versi terbaru
+
+    
 }

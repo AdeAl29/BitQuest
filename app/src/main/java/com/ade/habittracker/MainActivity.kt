@@ -49,7 +49,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.ade.habittracker.model.Achievement
+// import com.ade.habittracker.model.Achievement (IMPORT INI DIHAPUS)
 import com.ade.habittracker.model.Habit
 import com.ade.habittracker.ui.theme.HabitTrackerTheme
 import com.ade.habittracker.ui.viewmodel.HabitViewModel
@@ -63,6 +63,173 @@ val TextColorPrimary = Color(0xFFFFFFFF)
 val TextColorSecondary = Color(0xFF8E8E93)
 val AccentYellow = Color(0xFFFFCC00)
 val ErrorColor = Color(0xFFFF453A)
+
+// --- MODEL DATA ACHIEVEMENT BARU ---
+// Model data lama Anda (dari import) diganti dengan ini
+// untuk mendukung progress dan ikon
+data class Achievement(
+    val id: String,
+    val title: String,
+    val description: String,
+    val icon: ImageVector,
+    val isUnlocked: Boolean = false,
+    val progress: Int = 0, // Progress saat ini (cth: 5 hari streak)
+    val goal: Int = 1      // Target (cth: 7 hari streak)
+)
+// ----------------------------------
+
+// --- LOGIKA ACHIEVEMENT BARU ---
+// Logika ini idealnya ada di dalam HabitViewModel Anda,
+// tapi kita letakkan di sini untuk demonstrasi.
+fun getAllAchievements(
+    level: Int,
+    streak: Int,
+    totalXp: Int,
+    totalHabitsCompleted: Int // Anda perlu melacak ini di ViewModel
+): List<Achievement> {
+    val allAchievements = mutableListOf<Achievement>()
+
+    // 1. Level Achievements
+    allAchievements.add(
+        Achievement(
+            id = "level_5",
+            title = "Level 5 Tercapai",
+            description = "Capai level 5.",
+            icon = Icons.Default.Star,
+            isUnlocked = level >= 5,
+            progress = minOf(level, 5),
+            goal = 5
+        )
+    )
+    allAchievements.add(
+        Achievement(
+            id = "level_10",
+            title = "Level 10 Tercapai",
+            description = "Capai level 10.",
+            icon = Icons.Default.Star,
+            isUnlocked = level >= 10,
+            progress = minOf(level, 10),
+            goal = 10
+        )
+    )
+    allAchievements.add(
+        Achievement(
+            id = "level_20",
+            title = "Master",
+            description = "Capai level 20.",
+            icon = Icons.Default.Star,
+            isUnlocked = level >= 20,
+            progress = minOf(level, 20),
+            goal = 20
+        )
+    )
+
+
+    // 2. Streak Achievements
+    allAchievements.add(
+        Achievement(
+            id = "streak_3",
+            title = "Pemanasan",
+            description = "Capai 3 hari streak.",
+            icon = Icons.Default.CheckCircle,
+            isUnlocked = streak >= 3,
+            progress = minOf(streak, 3),
+            goal = 3
+        )
+    )
+    allAchievements.add(
+        Achievement(
+            id = "streak_7",
+            title = "Konsisten Seminggu",
+            description = "Capai 7 hari streak.",
+            icon = Icons.Default.CheckCircle,
+            isUnlocked = streak >= 7,
+            progress = minOf(streak, 7),
+            goal = 7
+        )
+    )
+    allAchievements.add(
+        Achievement(
+            id = "streak_30",
+            title = "Bulan Sempurna",
+            description = "Capai 30 hari streak.",
+            icon = Icons.Default.CheckCircle,
+            isUnlocked = streak >= 30,
+            progress = minOf(streak, 30),
+            goal = 30
+        )
+    )
+
+    // 3. Total XP Achievements
+    allAchievements.add(
+        Achievement(
+            id = "xp_1000",
+            title = "Kolektor XP",
+            description = "Kumpulkan 1000 total XP.",
+            icon = Icons.Default.EmojiEvents,
+            isUnlocked = totalXp >= 1000,
+            progress = minOf(totalXp, 1000),
+            goal = 1000
+        )
+    )
+    allAchievements.add(
+        Achievement(
+            id = "xp_5000",
+            title = "Elite",
+            description = "Kumpulkan 5000 total XP.",
+            icon = Icons.Default.EmojiEvents,
+            isUnlocked = totalXp >= 5000,
+            progress = minOf(totalXp, 5000),
+            goal = 5000
+        )
+    )
+
+    // 4. Total Habits Completed
+    allAchievements.add(
+        Achievement(
+            id = "habits_1",
+            title = "Langkah Pertama",
+            description = "Selesaikan misi pertamamu.",
+            icon = Icons.Default.Check,
+            isUnlocked = totalHabitsCompleted >= 1,
+            progress = minOf(totalHabitsCompleted, 1),
+            goal = 1
+        )
+    )
+    allAchievements.add(
+        Achievement(
+            id = "habits_50",
+            title = "Pekerja Keras",
+            description = "Selesaikan 50 total misi.",
+            icon = Icons.Default.List,
+            isUnlocked = totalHabitsCompleted >= 50,
+            progress = minOf(totalHabitsCompleted, 50),
+            goal = 50
+        )
+    )
+    allAchievements.add(
+        Achievement(
+            id = "habits_200",
+            title = "Veteran Misi",
+            description = "Selesaikan 200 total misi.",
+            icon = Icons.Default.List,
+            isUnlocked = totalHabitsCompleted >= 200,
+            progress = minOf(totalHabitsCompleted, 200),
+            goal = 200
+        )
+    )
+
+    // Mengurutkan: yang belum selesai tapi ada progress di atas,
+    // lalu yang belum selesai, lalu yang sudah selesai
+    return allAchievements.sortedWith(
+        compareBy(
+            { it.isUnlocked }, // Selesai (true) di bawah
+            { !(it.progress > 0 && !it.isUnlocked) } // Progress (true) di atas
+        )
+    )
+}
+// ------------------------------
+
 
 class MainActivity : ComponentActivity() {
     private val viewModel: HabitViewModel by viewModels()
@@ -157,10 +324,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// BARU: Struktur data untuk template misi
+// Struktur data untuk template misi
 data class HabitTemplate(val name: String, val schedule: String, val weight: Int)
 
-// BARU: Daftar template misi yang sudah jadi dengan XP yang ditentukan
+// Daftar template misi (TERMASUK SIDE QUEST)
 val predefinedHabitTemplates = listOf(
     // Kategori: Kesehatan Fisik
     "Kesehatan Fisik" to listOf(
@@ -198,8 +365,27 @@ val predefinedHabitTemplates = listOf(
         HabitTemplate("Cuci piring", "Setiap Hari", 10),
         HabitTemplate("Menyelesaikan tugas utama", "Setiap Hari", 40),
         HabitTemplate("Membuang sampah", "Setiap Hari", 5)
+    ),
+
+    // --- KATEGORI SIDE QUEST (PINDAHAN DARI ACHIEVEMENTS) ---
+    "Tantangan Sosial (Side Quest)" to listOf(
+        HabitTemplate("Teman Baru", "Tugas Sekali", 50),
+        HabitTemplate("Hubungi Teman Lama", "Tugas Sekali", 30)
+    ),
+    "Tantangan Penjelajah (Side Quest)" to listOf(
+        HabitTemplate("Ambil Rute Baru", "Tugas Sekali", 20),
+        HabitTemplate("Kunjungi Tempat Baru", "Tugas Sekali", 40)
+    ),
+    "Tantangan Pikiran (Side Quest)" to listOf(
+        HabitTemplate("Baca 1 Bab Buku Non-Fiksi", "Tugas Sekali", 25),
+        HabitTemplate("24 Jam Tanpa Keluhan", "Tugas Sekali", 100)
+    ),
+    "Tantangan Kebugaran (Side Quest)" to listOf(
+        HabitTemplate("Peregangan Pagi 5 Menit", "Setiap Hari", 15),
+        HabitTemplate("Pilih Naik Tangga", "Setiap Hari", 20)
     )
 )
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -217,7 +403,7 @@ fun MainScreen(
     // State untuk mengontrol 3 bottom sheet
     var showAddOptionsSheet by remember { mutableStateOf(false) } // Pilihan (manual/template)
     var showManualAddSheet by remember { mutableStateOf(false) }  // Form manual
-    var showTemplateSheet by remember { mutableStateOf(false) }   // Daftar template
+    var showTemplateSheet by remember { mutableStateOf(false) }    // Daftar template
 
     var habitToEdit by remember { mutableStateOf<Habit?>(null) }
     var habitToDelete by remember { mutableStateOf<Habit?>(null) }
@@ -380,7 +566,19 @@ fun AppNavHost(
             )
         }
         composable("achievements") {
-            AchievementsScreen(achievements = appData?.achievements ?: emptyList())
+            // --- LOGIKA ACHIEVEMENT DIMASUKKAN DI SINI ---
+            // Asumsi: ViewModel Anda harusnya melacak totalHabitsCompleted
+            // Di sini kita pakai totalXp sebagai perkiraan kasar
+            val mockTotalHabitsCompleted = (appData?.totalXp ?: 0) / 25 // Asumsi rata-rata 25 XP per misi
+
+            val variedAchievements = getAllAchievements(
+                level = appData?.level ?: 1,
+                streak = appData?.streak ?: 0,
+                totalXp = appData?.totalXp ?: 0,
+                totalHabitsCompleted = mockTotalHabitsCompleted
+            )
+            // Menggunakan daftar yang bervariasi, bukan dari appData
+            AchievementsScreen(achievements = variedAchievements)
         }
     }
 }
@@ -607,76 +805,227 @@ fun StatCard(title: String, value: String, icon: ImageVector, iconColor: Color) 
 }
 
 
+// --- FUNGSI AchievementsScreen (TETAP SAMA, TAPI MENERIMA MODEL BARU) ---
 @Composable
-fun AchievementsScreen(achievements: List<Achievement>) {
-    Column(
+fun AchievementsScreen(achievements: List<Achievement>) { // Menggunakan model baru
+    // State untuk mengontrol dialog
+    var achievementToShowDesc by remember { mutableStateOf<Achievement?>(null) }
+
+    // --- Kalkulasi Progress (STATISTIK KESELURUHAN) ---
+    val unlockedCount = achievements.count { it.isUnlocked }
+    val totalCount = achievements.size
+    val progress = if (totalCount > 0) unlockedCount.toFloat() / totalCount.toFloat() else 0f
+
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            "PENCAPAIAN",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextColorPrimary,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        if (achievements.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Belum ada pencapaian tersedia.", color = TextColorSecondary)
-            }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(achievements) { achievement ->
-                    AchievementItem(achievement = achievement)
+        // Item 1: Judul Utama
+        item {
+            Text(
+                "PENCAPAIAN",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextColorPrimary,
+                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+            )
+        }
+
+        // Item 2: Header Progress Card (Keseluruhan)
+        if (totalCount > 0) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = CardBackground),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "PROGRESS PENCAPAIAN",
+                            color = TextColorSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "$unlockedCount dari $totalCount Selesai",
+                            color = TextColorPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(CircleShape),
+                            color = AccentYellow,
+                            trackColor = Color(0xFF48484A)
+                        )
+                    }
                 }
             }
         }
+
+        // Item 3: Daftar Achievement
+        if (achievements.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillParentMaxWidth()
+                        .padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Belum ada pencapaian tersedia.", color = TextColorSecondary)
+                }
+            }
+        } else {
+            // Menggunakan ID String sebagai key
+            items(achievements, key = { it.id }) { achievement ->
+                AchievementItem( // Memanggil AchievementItem yang baru
+                    achievement = achievement,
+                    onClick = {
+                        achievementToShowDesc = achievement
+                    }
+                )
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+
+    if (achievementToShowDesc != null) {
+        AchievementDescriptionDialog( // Memanggil Dialog yang baru
+            achievement = achievementToShowDesc!!,
+            onDismiss = { achievementToShowDesc = null }
+        )
     }
 }
 
+// --- FUNGSI AchievementItem (DIMODIFIKASI UNTUK VARIASI) ---
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AchievementItem(achievement: Achievement) {
+fun AchievementItem(
+    achievement: Achievement, // Menggunakan model data baru
+    onClick: () -> Unit
+) {
     val borderColor = if (achievement.isUnlocked) AccentYellow else CardBackground
     val iconColor = if (achievement.isUnlocked) AccentYellow else TextColorSecondary
+    val progress = if (achievement.goal > 0) achievement.progress.toFloat() / achievement.goal.toFloat() else 0f
 
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = CardBackground),
-        border = BorderStroke(2.dp, borderColor)
+        border = BorderStroke(2.dp, borderColor),
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF48484A)),
-                contentAlignment = Alignment.Center
+        // Gunakan Column agar bisa menaruh progress bar
+        Column(modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Star, contentDescription = "Icon Bintang", tint = iconColor)
+                Box(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF48484A)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // BARU: Gunakan ikon dari data
+                    Icon(achievement.icon, contentDescription = "Icon", tint = iconColor, modifier = Modifier.size(28.dp))
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(achievement.title, color = TextColorPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+
+                    // BARU: Tampilkan progress teks jika belum unlock
+                    if (!achievement.isUnlocked && achievement.goal > 1) {
+                        Text(
+                            "${achievement.progress} / ${achievement.goal}",
+                            color = TextColorSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                if (achievement.isUnlocked) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "Tercapai",
+                        tint = AccentYellow,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(achievement.title, color = TextColorPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Text(achievement.description, color = TextColorSecondary, fontSize = 14.sp)
-            }
-            if (achievement.isUnlocked) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = "Tercapai",
-                    tint = AccentYellow,
-                    modifier = Modifier.size(24.dp)
+
+            // BARU: Tampilkan Progress Bar jika belum selesai dan punya goal > 1
+            if (!achievement.isUnlocked && achievement.goal > 1) {
+                Spacer(modifier = Modifier.height(12.dp))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(CircleShape),
+                    color = AccentYellow,
+                    trackColor = Color(0xFF48484A)
                 )
             }
         }
     }
 }
 
+// --- COMPOSABLE DIALOG (DIMODIFIKASI) ---
+@Composable
+fun AchievementDescriptionDialog(
+    achievement: Achievement, // Menggunakan model data baru
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardBackground,
+        title = {
+            Text(
+                text = achievement.title,
+                color = if (achievement.isUnlocked) AccentYellow else TextColorPrimary,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            // BARU: Tampilkan deskripsi dan progress
+            Column {
+                Text(
+                    text = achievement.description,
+                    color = TextColorSecondary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Progress: ${achievement.progress} / ${achievement.goal}",
+                    color = if (achievement.isUnlocked) AccentYellow else TextColorPrimary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Tutup", color = PrimaryColor)
+            }
+        }
+    )
+}
 
 @Composable
 fun BottomNavigationBar(navController: NavController) {
@@ -810,6 +1159,7 @@ fun TemplateHabitSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HabitTemplateItem(
     template: HabitTemplate,
