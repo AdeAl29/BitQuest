@@ -49,12 +49,12 @@ class SplashActivity : ComponentActivity() {
 @Composable
 fun VideoSplashScreen(onVideoEnded: () -> Unit) {
     val context = LocalContext.current
-    val videoUri = Uri.parse("android.resource://${context.packageName}/${R.raw.splash_video1}")
+    val videoUri = Uri.parse("android.resource://${context.packageName}/${R.raw.splash_video}")
 
     // LaunchedEffect akan berjalan 1x. Ini akan memanggil onVideoEnded()
     // setelah 2500ms (2.5 detik), tidak peduli durasi videonya.
     LaunchedEffect(key1 = true) {
-        delay(2500L) // Atur durasi splash screen di sini (misal: 2.5 detik)
+        delay(5000L) // Atur durasi splash screen di sini (misal: 2.5 detik)
         onVideoEnded()
     }
 
