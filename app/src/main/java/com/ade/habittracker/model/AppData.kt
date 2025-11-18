@@ -15,24 +15,20 @@ data class Habit(
 )
 
 @Serializable
-data class Achievement(
-    val id: Int,
-    val title: String,
-    val description: String,
-    val isUnlocked: Boolean = false
-)
-
-@Serializable
 data class AppData(
     val habits: List<Habit> = emptyList(),
-    val achievements: List<Achievement> = emptyList(),
     val totalXp: Int = 0,
     val level: Int = 1,
     val streak: Int = 0,
-    // BARU: Properti untuk melacak tanggal reset terakhir
     val lastResetDate: String? = null,
-    @kotlinx.serialization.Transient
-    val lastCompletionDate: String? = null
+    val lastCompletionDate: String? = null,
+    val totalHabitsCompleted: Int = 0,
+
+    // --- PERUBAHAN DI SINI ---
+    val userName: String = "Petualang",
+    val profileImageId: String = "avatar_level1",
+    val userTitle: String = "Petualang Baru" // <-- TAMBAHAN BARU
+    // ---------------------
 ) {
     fun toJson(): String = Json.encodeToString(this)
 
@@ -40,4 +36,3 @@ data class AppData(
         fun fromJson(jsonString: String): AppData = Json.decodeFromString(jsonString)
     }
 }
-
