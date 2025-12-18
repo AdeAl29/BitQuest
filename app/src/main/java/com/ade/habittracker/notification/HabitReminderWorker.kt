@@ -76,7 +76,7 @@ class HabitReminderWorker(
 
         // 4. RAKIT NOTIFIKASI
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // Ganti dengan ikon notifikasi app Anda
+            .setSmallIcon(R.drawable.icon) // Ganti dengan ikon notifikasi app Anda
             .setContentTitle(randomTitle)   // Judul acak
             .setContentText(randomMessage) // Pesan acak
             .setStyle(NotificationCompat.BigTextStyle().bigText(randomMessage)) // Agar teks panjang terbaca semua

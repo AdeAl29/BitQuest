@@ -28,13 +28,16 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     kotlinOptions {
         jvmTarget = "11"
     }
+
     buildFeatures {
         compose = true
     }
@@ -42,51 +45,54 @@ android {
 
 dependencies {
 
+    // Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+
+    // Compose
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
-    implementation(libs.androidx.activity)
-    implementation(libs.androidx.constraintlayout)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+
+    // Debug & Test Compose
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    // Navigation Compose
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+
+    // AppCompat & Material
+    implementation(libs.androidx.appcompat)
+    implementation(libs.material)
+
+    // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-// Icons
+    // Icons
     implementation("androidx.compose.material:material-icons-extended:1.6.7")
-    
-    // ViewModel Compose
+
+    // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
 
-// Jetpack DataStore
+    // ✅ DataStore (INI YANG PENTING)
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
-// Kotlinx Serialization for JSON
+    // Kotlin Serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     // WorkManager
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 
-    // Splash Screen API
+    // Splash Screen
     implementation("androidx.core:core-splashscreen:1.0.1")
 
-    // Coil for image loading
-    implementation("io.coil-kt:coil-compose:2.5.0") // Cek versi terbaru jika perlu
+    // Coil (pilih SATU, jangan dua)
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // Di dalam blok dependencies { ... }
-    implementation("io.coil-kt:coil-compose:2.6.0") // Gunakan versi terbaru
-
-    
+    // Unit Test
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
 }
