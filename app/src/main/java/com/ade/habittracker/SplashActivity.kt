@@ -49,7 +49,7 @@ class SplashActivity : ComponentActivity() {
 @Composable
 fun VideoSplashScreen(onVideoEnded: () -> Unit) {
     val context = LocalContext.current
-    val videoUri = Uri.parse("android.resource://${context.packageName}/${R.raw.splash_video}")
+    val videoUri = Uri.parse("android.resource://${context.packageName}/${R.raw.splash_video2}")
 
     // LaunchedEffect akan berjalan 1x. Ini akan memanggil onVideoEnded()
     // setelah 2500ms (2.5 detik), tidak peduli durasi videonya.

@@ -286,7 +286,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun scheduleDailyReminder(context: Context) {
-        val reminderRequest = PeriodicWorkRequestBuilder<HabitReminderWorker>(1, TimeUnit.DAYS)
+        val reminderRequest = PeriodicWorkRequestBuilder<HabitReminderWorker>(3, TimeUnit.DAYS)
             .build()
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(

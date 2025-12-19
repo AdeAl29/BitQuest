@@ -9,7 +9,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.Worker
 import androidx.work.WorkerParameters
-import com.ade.habittracker.MainActivity // Pastikan ini sesuai dengan nama Activity utama Anda
+import com.ade.habittracker.MainActivity
 import com.ade.habittracker.R
 import kotlin.random.Random
 
@@ -24,68 +24,82 @@ class HabitReminderWorker(
     }
 
     private fun sendReminderNotification() {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "habit_reminder_channel"
 
-        // 1. SETUP INTENT (Agar aplikasi terbuka saat notifikasi diklik)
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
 
-        // Flag Immutable wajib untuk Android 12 ke atas
-        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+        val pendingIntent = PendingIntent.getActivity(
             context,
             0,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // 2. DATA KATA-KATA MOTIVASI (Agar notifikasi bervariasi)
-        val titles = listOf(
-            "Waktunya Level Up! ⚔️",
-            "Jangan Putus Streak! 🔥",
-            "Misi Harian Menanti 📜",
-            "Jadilah Lebih Baik 💪",
-            "Ingat Tujuanmu 🎯"
-        )
+        // ======================
+        // FIRST TIME CHECK
+        // ======================
+        val isFirstTime = NotificationPreference.isFirstTime(context)
 
-        val messages = listOf(
-            "Satu langkah kecil hari ini adalah lompatan besar untuk masa depan.",
-            "Disiplin adalah jembatan antara tujuan dan pencapaian. Ayo selesaikan misimu!",
-            "Jangan biarkan kemalasan menang. Buktikan kamu bisa konsisten!",
-            "Streak-mu sedang bagus! Sayang kalau berhenti sekarang.",
-            "Kesuksesan dimulai dari kebiasaan sehari-hari. Check-in sekarang!",
-            "Avatar-mu butuh XP! Selesaikan habit untuk naik level."
-        )
+        val title: String
+        val message: String
 
-        // Pilih pesan secara acak
-        val randomTitle = titles[Random.nextInt(titles.size)]
-        val randomMessage = messages[Random.nextInt(messages.size)]
+        if (isFirstTime) {
+            title = "Selamat Datang! 🎉"
+            message = "Perjalanan barumu dimulai hari ini. Satu habit kecil, satu langkah besar."
 
-        // 3. BUAT CHANNEL (Android 8.0+)
+            NotificationPreference.setNotFirstTime(context)
+        } else {
+            val titles = listOf(
+                "Misi Pagi Dimulai ☀️",
+                "Jangan Kendur 🔥",
+                "XP Menunggumu ⚔️",
+                "Masih Ada Waktu ⏳",
+                "Disiplin Dikit Lagi 💪",
+                "Avatar-mu Butuh Progress 😤",
+                "Satu Habit Saja 🎯",
+                "Hari Ini Jangan Kosong 📜"
+            )
+
+            val messages = listOf(
+                "Kerjakan satu habit. Satu itu cukup.",
+                "Streak-mu terlalu berharga buat dihentikan.",
+                "Sedikit progres hari ini lebih baik daripada nol.",
+                "Bukan soal mood. Ini soal komitmen.",
+                "XP tidak datang sendiri.",
+                "Hari ini masih bisa diselamatkan.",
+                "Jangan nunggu semangat, mulai aja dulu.",
+                "Satu checklist lagi, habis itu bebas."
+            )
+
+            title = titles.random()
+            message = messages.random()
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
                 "Habit Reminders",
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Channel untuk motivasi dan pengingat misi harian"
+                description = "Pengingat misi pagi, siang, dan malam"
             }
             notificationManager.createNotificationChannel(channel)
         }
 
-        // 4. RAKIT NOTIFIKASI
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.icon) // Ganti dengan ikon notifikasi app Anda
-            .setContentTitle(randomTitle)   // Judul acak
-            .setContentText(randomMessage) // Pesan acak
-            .setStyle(NotificationCompat.BigTextStyle().bigText(randomMessage)) // Agar teks panjang terbaca semua
+            .setSmallIcon(R.drawable.icon)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setContentIntent(pendingIntent) // Pasang Intent di sini
-            .setAutoCancel(true) // Notifikasi hilang otomatis setelah diklik
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
             .build()
 
-        // Tampilkan Notifikasi (ID 1 agar selalu menimpa notif lama, ganti Random jika ingin menumpuk)
-        notificationManager.notify(1, notification)
+        notificationManager.notify(Random.nextInt(), notification)
     }
 }
