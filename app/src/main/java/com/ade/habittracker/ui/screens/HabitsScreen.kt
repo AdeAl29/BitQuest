@@ -11,7 +11,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import com.ade.habittracker.R
 import com.ade.habittracker.model.Habit
+import com.ade.habittracker.ui.components.ChibiMessage
+import com.ade.habittracker.ui.components.DraggableChibiWithBubble
 import com.ade.habittracker.ui.components.FallingSnowEffect
 import com.ade.habittracker.ui.components.HabitItem
 import com.ade.habittracker.ui.theme.TextColorPrimary
@@ -26,15 +29,40 @@ fun HabitsScreen(
 ) {
     var expandedMenuHabitId by remember { mutableStateOf<Int?>(null) }
 
+    // 🔗 TEKS + SUARA (SATU PAKET, TIDAK BISA KETUKER)
+    val chibiMessages = listOf(
+        ChibiMessage(
+            text = "Ayo satu misi lagi!",
+            voiceRes = R.raw.chibi_ayo_satu_misi
+        ),
+        ChibiMessage(
+            text = "Jangan bolos ya!",
+            voiceRes = R.raw.chibi_jangan_bolos
+        ),
+        ChibiMessage(
+            text = "Konsisten dikit lagi!",
+            voiceRes = R.raw.chibi_konsisten_keren
+        ),
+        ChibiMessage(
+            text = "Aku liatin loh 👀",
+            voiceRes = R.raw.chibi_aku_liatin
+        ),
+        ChibiMessage(
+            text = "Sedikit lagi selesai!",
+            voiceRes = R.raw.chibi_sedikit_lagi
+        )
+    )
+
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // ❄️ Background salju jatuh pelan
+        // ❄️ Layer 1 — Salju (background)
         FallingSnowEffect(
             modifier = Modifier
                 .fillMaxSize()
                 .zIndex(0f)
         )
 
+        // 📋 Layer 2 — Konten utama
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -64,10 +92,7 @@ fun HabitsScreen(
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(
-                        items = habits,
-                        key = { it.id }
-                    ) { habit ->
+                    items(habits, key = { it.id }) { habit ->
                         HabitItem(
                             habit = habit,
                             onCheckedChanged = { isChecked ->
@@ -78,9 +103,7 @@ fun HabitsScreen(
                                 expandedMenuHabitId =
                                     if (expandedMenuHabitId == habit.id) null else habit.id
                             },
-                            onDismissMenu = {
-                                expandedMenuHabitId = null
-                            },
+                            onDismissMenu = { expandedMenuHabitId = null },
                             onEditClick = { onEditClick(habit) },
                             onDeleteClick = { onDeleteClick(habit) }
                         )
@@ -88,5 +111,14 @@ fun HabitsScreen(
                 }
             }
         }
+
+        // 👀 Layer 3 — CHIBI DIAM, DRAG, TAP = 1 PESAN + 1 SUARA
+        DraggableChibiWithBubble(
+            chibiRes = R.drawable.chibi_helper,
+            messages = chibiMessages,
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(30f) // 🔥 PALING DEPAN
+        )
     }
 }
