@@ -26,8 +26,10 @@ class HabitReminderWorker(
     private fun sendReminderNotification() {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
         val channelId = "habit_reminder_channel"
 
+        // 👉 intent buka app saat notif ditekan
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -36,7 +38,7 @@ class HabitReminderWorker(
             context,
             0,
             intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         // ======================
@@ -49,12 +51,13 @@ class HabitReminderWorker(
 
         if (isFirstTime) {
             title = "Selamat Datang! 🎉"
-            message = "Perjalanan barumu dimulai hari ini. Satu habit kecil, satu langkah besar."
+            message =
+                "Perjalanan barumu dimulai hari ini. Satu habit kecil, satu langkah besar."
 
             NotificationPreference.setNotFirstTime(context)
         } else {
             val titles = listOf(
-                "Misi Pagi Dimulai ☀️",
+                "Misi Hari Ini Menunggu ☀️",
                 "Jangan Kendur 🔥",
                 "XP Menunggumu ⚔️",
                 "Masih Ada Waktu ⏳",
@@ -79,23 +82,29 @@ class HabitReminderWorker(
             message = messages.random()
         }
 
+        // ======================
+        // NOTIFICATION CHANNEL
+        // ======================
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
                 "Habit Reminders",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH // 🔥 PASTI MUNCUL
             ).apply {
-                description = "Pengingat misi pagi, siang, dan malam"
+                description = "Pengingat habit harian"
             }
             notificationManager.createNotificationChannel(channel)
         }
 
+        // ======================
+        // BUILD NOTIFICATION
+        // ======================
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.icon)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()

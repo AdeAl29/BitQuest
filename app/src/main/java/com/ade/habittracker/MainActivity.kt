@@ -10,33 +10,35 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.ade.habittracker.notification.HabitReminderWorker
 import com.ade.habittracker.ui.navigation.MainScreen
 import com.ade.habittracker.ui.theme.HabitTrackerTheme
 import com.ade.habittracker.ui.viewmodel.HabitViewModel
 
 class MainActivity : ComponentActivity() {
+
     private val viewModel: HabitViewModel by viewModels()
 
-    // --- LOGIKA MUSIK LATAR ---
+    // 🔊 MUSIK LATAR
     private var mediaPlayer: MediaPlayer? = null
 
     private fun startBackgroundMusic() {
         if (mediaPlayer == null) {
-            mediaPlayer = MediaPlayer.create(this, R.raw.sountrack)
-            mediaPlayer?.isLooping = true
-            mediaPlayer?.setVolume(0.5f, 0.5f)
+            mediaPlayer = MediaPlayer.create(this, R.raw.sountrack).apply {
+                isLooping = true
+                setVolume(0.5f, 0.5f)
+            }
         }
         try {
             if (mediaPlayer?.isPlaying == false) {
                 mediaPlayer?.start()
             }
         } catch (e: IllegalStateException) {
-            Log.e("MainActivityMusic", "Error starting MediaPlayer: ${e.message}")
+            Log.e("MainActivityMusic", "MediaPlayer error: ${e.message}")
             releaseMediaPlayer()
-            mediaPlayer = MediaPlayer.create(this, R.raw.sountrack)
-            mediaPlayer?.isLooping = true
-            mediaPlayer?.setVolume(0.5f, 0.5f)
-            mediaPlayer?.start()
+            startBackgroundMusic()
         }
     }
 
@@ -54,18 +56,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Pastikan ini sudah tidak ada tanda '//'
+
+        // 🔊 Musik mulai
         startBackgroundMusic()
 
-        // --- TAMBAHAN BARU DI SINI ---
-        // Panggil pengecekan reset harian SETIAP KALI aplikasi dibuka
+        // 📆 Reset habit harian
         viewModel.resetHabitsIfNewDay()
-        // --------------------------------
+
+        // 🔔 NOTIFIKASI SAAT APP DIBUKA
+        val oneTimeWork = OneTimeWorkRequestBuilder<HabitReminderWorker>().build()
+        WorkManager.getInstance(this).enqueue(oneTimeWork)
     }
 
     override fun onStop() {
         super.onStop()
-        // Pastikan ini sudah tidak ada tanda '//'
         pauseBackgroundMusic()
     }
 
@@ -74,9 +78,9 @@ class MainActivity : ComponentActivity() {
         releaseMediaPlayer()
     }
 
-    // --- Logic untuk meminta izin notifikasi ---
+    // 🔔 REQUEST IZIN NOTIFIKASI (Android 13+)
     private val requestPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
                 viewModel.scheduleDailyReminder(applicationContext)
                 Toast.makeText(this, "Pengingat harian diaktifkan!", Toast.LENGTH_SHORT).show()
@@ -96,6 +100,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             HabitTrackerTheme {
                 MainScreen(
