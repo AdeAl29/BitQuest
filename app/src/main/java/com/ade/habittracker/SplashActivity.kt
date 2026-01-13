@@ -1,7 +1,8 @@
 package com.ade.habittracker
 
+import android.content.Context // <-- PENTING: Untuk akses SharedPreferences
 import android.content.Intent
-import android.media.MediaPlayer // <-- IMPORT BARU
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.widget.VideoView
@@ -9,21 +10,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect // <-- IMPORT BARU
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import kotlinx.coroutines.delay // <-- IMPORT BARU
+import kotlinx.coroutines.delay
 
 class SplashActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 1. Membuat video menjadi full screen (menyembunyikan status bar, dll.)
+        // 1. Membuat video menjadi full screen
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.hide(WindowInsetsCompat.Type.systemBars())
@@ -31,30 +32,41 @@ class SplashActivity : ComponentActivity() {
 
         setContent {
             VideoSplashScreen {
-                // Callback ini akan dipanggil saat video selesai ATAU durasi tercapai
-                goToMainActivity()
+                // Saat video selesai/skip, jalankan pengecekan login
+                checkLoginAndNavigate()
             }
         }
     }
 
-    private fun goToMainActivity() {
-        // Mencegah pemanggilan ganda jika video selesai dan timer berjalan bersamaan
+    private fun checkLoginAndNavigate() {
+        // Mencegah pemanggilan ganda
         if (isFinishing) return
 
-        startActivity(Intent(this, MainActivity::class.java))
-        finish() // Menutup SplashActivity agar tidak bisa kembali
+        // --- LOGIKA BARU DI SINI ---
+        // Cek data session di memori HP
+        val sharedPref = getSharedPreferences("user_session", Context.MODE_PRIVATE)
+        val isLoggedIn = sharedPref.getBoolean("is_logged_in", false) // Default false (belum login)
+
+        if (isLoggedIn) {
+            // Jika sudah login, langsung ke menu utama
+            startActivity(Intent(this, MainActivity::class.java))
+        } else {
+            // Jika belum login, ke halaman login dulu
+            startActivity(Intent(this, LoginActivity::class.java))
+        }
+
+        finish() // Tutup SplashActivity
     }
 }
 
 @Composable
 fun VideoSplashScreen(onVideoEnded: () -> Unit) {
     val context = LocalContext.current
-    val videoUri = Uri.parse("android.resource://${context.packageName}/${R.raw.splash_video2}")
+    val videoUri = Uri.parse("android.resource://${context.packageName}/${R.raw.splash_video}")
 
-    // LaunchedEffect akan berjalan 1x. Ini akan memanggil onVideoEnded()
-    // setelah 2500ms (2.5 detik), tidak peduli durasi videonya.
     LaunchedEffect(key1 = true) {
-        delay(5000L) // Atur durasi splash screen di sini (misal: 2.5 detik)
+        // Timer pengaman (misal video macet atau terlalu panjang, max 5 detik skip)
+        delay(5000L)
         onVideoEnded()
     }
 
@@ -64,21 +76,17 @@ fun VideoSplashScreen(onVideoEnded: () -> Unit) {
                 setVideoURI(videoUri)
 
                 setOnPreparedListener { mp ->
-                    // VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING adalah "CenterCrop"
+                    // Agar video full screen (Center Crop)
                     mp.setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
-
-                    // --- PERUBAHAN DI SINI ---
-                    // Baris mp.setVolume(0f, 0f) telah dihapus
-                    // Video sekarang akan menggunakan volume media default perangkat.
-                    // -------------------------
+                    // Volume mengikuti pengaturan HP user (tidak di-mute paksa)
                 }
 
-                // Fallback: Jika video selesai LEBIH CEPAT dari 2.5 detik
+                // Jika video selesai diputar secara alami
                 setOnCompletionListener {
                     onVideoEnded()
                 }
 
-                // Fallback: Langsung skip jika video error
+                // Jika terjadi error saat memutar video, langsung skip
                 setOnErrorListener { _, _, _ ->
                     onVideoEnded()
                     true
@@ -87,6 +95,6 @@ fun VideoSplashScreen(onVideoEnded: () -> Unit) {
                 start()
             }
         },
-        modifier = Modifier.fillMaxSize() // Memastikan VideoView memenuhi layar
+        modifier = Modifier.fillMaxSize()
     )
 }

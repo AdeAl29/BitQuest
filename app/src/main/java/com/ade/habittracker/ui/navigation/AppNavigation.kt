@@ -1,48 +1,44 @@
 package com.ade.habittracker.ui.navigation
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.padding
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.Composable
-// import androidx.compose.runtime.LaunchedEffect // Dihapus karena sudah dipindah ke MainActivity
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import com.ade.habittracker.data.predefinedHabitTemplates
 import com.ade.habittracker.model.Habit
 import com.ade.habittracker.ui.components.DeleteConfirmationDialog
 import com.ade.habittracker.ui.components.EditNameDialog
-import com.ade.habittracker.ui.components.sheets.AddOptionsSheet
-import com.ade.habittracker.ui.components.sheets.AvatarPickerSheet
-import com.ade.habittracker.ui.components.sheets.ManualAddHabitSheet
-import com.ade.habittracker.ui.components.sheets.TemplateHabitSheet
-import com.ade.habittracker.ui.components.sheets.TitlePickerSheet
+import com.ade.habittracker.ui.components.sheets.*
 import com.ade.habittracker.ui.screens.AchievementsScreen
 import com.ade.habittracker.ui.screens.HabitsScreen
 import com.ade.habittracker.ui.screens.StatsScreen
@@ -53,65 +49,123 @@ import com.ade.habittracker.ui.theme.TextColorSecondary
 import com.ade.habittracker.ui.viewmodel.HabitViewModel
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(
     viewModel: HabitViewModel,
     onScheduleReminderClick: () -> Unit
 ) {
-    // Pengecekan reset harian sudah dipindah ke MainActivity.kt (onStart)
-    // LaunchedEffect(Unit) { ... } sudah dihapus dari sini.
-
-    val navController = rememberNavController()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val appData by viewModel.appData.collectAsStateWithLifecycle()
 
-    // State untuk Bottom Sheet
+    // --- PAGER STATE (Untuk Geser Halaman) ---
+    // 0 = Habits, 1 = Stats, 2 = Achievements
+    val pagerState = rememberPagerState(pageCount = { 3 })
+
+    // State untuk Bottom Sheet & Dialog
     var showAddOptionsSheet by remember { mutableStateOf(false) }
     var showManualAddSheet by remember { mutableStateOf(false) }
     var showTemplateSheet by remember { mutableStateOf(false) }
     var habitToEdit by remember { mutableStateOf<Habit?>(null) }
     var habitToDelete by remember { mutableStateOf<Habit?>(null) }
 
-    // State untuk Edit Profil
+    // State untuk Profil
     var showNameEditDialog by remember { mutableStateOf(false) }
     var showAvatarPickerSheet by remember { mutableStateOf(false) }
     var showTitlePickerSheet by remember { mutableStateOf(false) }
 
-    Scaffold(
-        containerColor = DarkBackground,
-        bottomBar = { BottomNavigationBar(navController = navController) },
-        floatingActionButton = {
-            val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-            if (currentRoute == "habits") {
-                FloatingActionButton(
-                    onClick = { showAddOptionsSheet = true },
-                    containerColor = PrimaryColor,
-                    contentColor = Color.White
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = "Tambah Habit")
+    // --- CONTAINER UTAMA (Fullscreen Box) ---
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DarkBackground)
+    ) {
+
+        // 1. KONTEN HALAMAN (SWIPEABLE / GESER)
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            // Tambahkan padding bawah agar konten terbawah tidak tertutup Menu Melayang
+            Box(modifier = Modifier.fillMaxSize().padding(bottom = 100.dp)) {
+                when (page) {
+                    0 -> {
+                        HabitsScreen(
+                            habits = appData?.habits ?: emptyList(),
+                            onHabitCheckedChanged = { habit, isChecked ->
+                                viewModel.toggleHabitCompleted(habit.id, isChecked)
+                            },
+                            onEditClick = { habit ->
+                                habitToEdit = habit
+                                showManualAddSheet = true
+                            },
+                            onDeleteClick = { habit -> habitToDelete = habit }
+                        )
+                    }
+                    1 -> {
+                        val (xpProgress, max) = viewModel.getXpProgress()
+                        StatsScreen(
+                            level = appData?.level ?: 1,
+                            streak = appData?.streak ?: 0,
+                            totalXp = appData?.totalXp ?: 0,
+                            xpProgress = xpProgress,
+                            maxXp = max,
+                            userName = appData?.userName ?: "Petualang",
+                            userTitle = appData?.userTitle ?: "Baru",
+                            profileImageResId = viewModel.profileImageResId.collectAsStateWithLifecycle().value,
+                            onScheduleReminderClick = onScheduleReminderClick,
+                            onNameClick = { showNameEditDialog = true },
+                            onAvatarClick = { showAvatarPickerSheet = true },
+                            onTitleClick = { showTitlePickerSheet = true },
+                            viewModel = viewModel // Passing viewModel untuk History Log
+                        )
+                    }
+                    2 -> {
+                        AchievementsScreen(
+                            achievements = viewModel.achievements.collectAsStateWithLifecycle().value
+                        )
+                    }
                 }
             }
         }
-    ) { innerPadding ->
-        AppNavHost(
-            navController = navController,
-            modifier = Modifier.padding(innerPadding),
-            viewModel = viewModel,
-            onEditClick = { habit ->
-                habitToEdit = habit
-                showManualAddSheet = true
-            },
-            onDeleteClick = { habit ->
-                habitToDelete = habit
-            },
-            onScheduleReminderClick = onScheduleReminderClick,
 
-            onNameClick = { showNameEditDialog = true },
-            onAvatarClick = { showAvatarPickerSheet = true },
-            onTitleClick = { showTitlePickerSheet = true }
+        // 2. FLOATING ACTION BUTTON (Hanya muncul di Halaman Habits / Page 0)
+        // Kita letakkan manual di Box agar posisinya pas di atas Glass Bar
+        AnimatedVisibility(
+            visible = pagerState.currentPage == 0,
+            enter = scaleIn() + fadeIn(),
+            exit = scaleOut() + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 110.dp, end = 24.dp) // Jarak dari bawah disesuaikan agar tidak menabrak menu
+        ) {
+            FloatingActionButton(
+                onClick = { showAddOptionsSheet = true },
+                containerColor = PrimaryColor,
+                contentColor = Color.White,
+                shape = CircleShape,
+                elevation = FloatingActionButtonDefaults.elevation(8.dp)
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = "Tambah")
+            }
+        }
+
+        // 3. GLASS BOTTOM NAVIGATION (Melayang di Bawah)
+        GlassBottomNavigation(
+            selectedIndex = pagerState.currentPage,
+            onItemSelected = { index ->
+                scope.launch {
+                    pagerState.animateScrollToPage(index)
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp, start = 24.dp, end = 24.dp) // Mengambang (Floating)
         )
     }
+
+    // --- LOGIKA BOTTOM SHEETS & DIALOGS ---
 
     // Dialog Edit Nama
     if (showNameEditDialog) {
@@ -119,9 +173,7 @@ fun MainScreen(
         EditNameDialog(
             currentName = userName,
             onDismiss = { showNameEditDialog = false },
-            onConfirm = { newName ->
-                viewModel.updateUserName(newName)
-            }
+            onConfirm = { newName -> viewModel.updateUserName(newName) }
         )
     }
 
@@ -130,7 +182,6 @@ fun MainScreen(
         val avatarList by viewModel.avatarListWithLockStatus.collectAsStateWithLifecycle()
         ModalBottomSheet(
             onDismissRequest = { showAvatarPickerSheet = false },
-            sheetState = rememberModalBottomSheetState(),
             containerColor = DarkBackground
         ) {
             AvatarPickerSheet(
@@ -150,7 +201,6 @@ fun MainScreen(
         val currentTitle by viewModel.userTitle.collectAsStateWithLifecycle()
         ModalBottomSheet(
             onDismissRequest = { showTitlePickerSheet = false },
-            sheetState = rememberModalBottomSheetState(),
             containerColor = DarkBackground
         ) {
             TitlePickerSheet(
@@ -164,11 +214,10 @@ fun MainScreen(
         }
     }
 
-    // (Kode untuk bottom sheet Add/Edit Habit)
+    // Add Options Sheet
     if (showAddOptionsSheet) {
         ModalBottomSheet(
             onDismissRequest = { showAddOptionsSheet = false },
-            sheetState = rememberModalBottomSheetState(),
             containerColor = CardBackground
         ) {
             AddOptionsSheet(
@@ -188,10 +237,11 @@ fun MainScreen(
             )
         }
     }
+
+    // Manual Add Sheet
     if (showManualAddSheet) {
         ModalBottomSheet(
             onDismissRequest = { showManualAddSheet = false },
-            sheetState = rememberModalBottomSheetState(),
             containerColor = CardBackground
         ) {
             ManualAddHabitSheet(
@@ -206,29 +256,28 @@ fun MainScreen(
                         showManualAddSheet = false
                     }
                 },
-                onCancel = {
-                    scope.launch { showManualAddSheet = false }
-                }
+                onCancel = { scope.launch { showManualAddSheet = false } }
             )
         }
     }
+
+    // Template Sheet
     if (showTemplateSheet) {
         ModalBottomSheet(
             onDismissRequest = { showTemplateSheet = false },
-            sheetState = rememberModalBottomSheetState(),
             containerColor = DarkBackground
         ) {
             TemplateHabitSheet(
                 templates = predefinedHabitTemplates,
                 onTemplateClick = { template ->
-                    scope.launch {
-                        viewModel.addHabit(template.name, template.schedule, template.weight)
-                    }
-                    Toast.makeText(navController.context, "${template.name} ditambahkan!", Toast.LENGTH_SHORT).show()
+                    scope.launch { viewModel.addHabit(template.name, template.schedule, template.weight) }
+                    Toast.makeText(context, "${template.name} ditambahkan!", Toast.LENGTH_SHORT).show()
                 }
             )
         }
     }
+
+    // Delete Dialog
     if (habitToDelete != null) {
         DeleteConfirmationDialog(
             habitName = habitToDelete!!.name,
@@ -236,109 +285,94 @@ fun MainScreen(
                 viewModel.deleteHabit(habitToDelete!!.id)
                 habitToDelete = null
             },
-            onDismiss = {
-                habitToDelete = null
-            }
+            onDismiss = { habitToDelete = null }
         )
     }
 }
 
+// ─── KOMPONEN CUSTOM: GLASS BOTTOM NAVIGATION (MENU IPHONE STYLE) ───
 @Composable
-fun AppNavHost(
-    navController: NavHostController,
-    modifier: Modifier = Modifier,
-    viewModel: HabitViewModel,
-    onEditClick: (Habit) -> Unit,
-    onDeleteClick: (Habit) -> Unit,
-    onScheduleReminderClick: () -> Unit,
-    onNameClick: () -> Unit,
-// --- PERBAIKAN DI SINI: Menghapus 'Two a,' ---
-    onAvatarClick: () -> Unit,
-    onTitleClick: () -> Unit
+fun GlassBottomNavigation(
+    selectedIndex: Int,
+    onItemSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val appData by viewModel.appData.collectAsStateWithLifecycle()
-    val achievements by viewModel.achievements.collectAsStateWithLifecycle()
-    val userName by viewModel.userName.collectAsStateWithLifecycle()
-    val userTitle by viewModel.userTitle.collectAsStateWithLifecycle()
-    val profileImageResId by viewModel.profileImageResId.collectAsStateWithLifecycle()
-
-    NavHost(
-        navController = navController,
-        startDestination = "habits",
-        modifier = modifier
-    ) {
-        composable("habits") {
-            HabitsScreen(
-                habits = appData?.habits ?: emptyList(),
-                onHabitCheckedChanged = { habit, isChecked ->
-                    viewModel.toggleHabitCompleted(habit.id, isChecked)
-                },
-                onEditClick = onEditClick,
-                onDeleteClick = onDeleteClick
-            )
-        }
-        composable("stats") {
-            val (xpProgress, max) = viewModel.getXpProgress()
-            StatsScreen(
-                level = appData?.level ?: 1,
-                streak = appData?.streak ?: 0,
-                totalXp = appData?.totalXp ?: 0,
-                xpProgress = xpProgress,
-                maxXp = max,
-                userName = userName,
-                userTitle = userTitle,
-                profileImageResId = profileImageResId,
-                onScheduleReminderClick = onScheduleReminderClick,
-
-                onNameClick = onNameClick,
-                onAvatarClick = onAvatarClick,
-                onTitleClick = onTitleClick
-            )
-        }
-        composable("achievements") {
-            AchievementsScreen(
-                achievements = achievements
-            )
-        }
-    }
-}
-
-@Composable
-fun BottomNavigationBar(navController: NavController) {
     val items = listOf(
-        NavigationItem("habits", Icons.Default.List, "Habits"),
-        NavigationItem("stats", Icons.Default.BarChart, "Statistik"),
-        NavigationItem("achievements", Icons.Default.EmojiEvents, "Pencapaian")
+        Triple(0, Icons.Filled.List, "Habits"),
+        Triple(1, Icons.Filled.BarChart, "Stats"),
+        Triple(2, Icons.Filled.EmojiEvents, "Prestasi")
     )
-    NavigationBar(
-        containerColor = CardBackground,
-        contentColor = TextColorSecondary
-    ) {
-        val navBackStackEntry by navController.currentBackStackEntryAsState()
-        val currentRoute = navBackStackEntry?.destination?.route
 
-        items.forEach { item ->
-            NavigationBarItem(
-                icon = { Icon(item.icon, contentDescription = item.title) },
-                label = { Text(item.title) },
-                selected = currentRoute == item.route,
-                onClick = {
-                    navController.navigate(item.route) {
-                        popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = PrimaryColor,
-                    unselectedIconColor = TextColorSecondary,
-                    selectedTextColor = PrimaryColor,
-                    unselectedTextColor = TextColorSecondary,
-                    indicatorColor = CardBackground
-                )
+    // Container Glass Effect
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(70.dp) // Tinggi Bar
+            // 1. Clip bentuk kapsul/rounded penuh
+            .clip(RoundedCornerShape(35.dp))
+            // 2. Background semi-transparan gelap (Glass)
+            .background(Color(0xFF252525).copy(alpha = 0.85f))
+            // 3. Border gradasi tipis (efek mengkilap)
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.15f), // Atas lebih terang
+                        Color.White.copy(alpha = 0.05f)  // Bawah gelap
+                    )
+                ),
+                shape = RoundedCornerShape(35.dp)
             )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            items.forEach { (index, icon, label) ->
+                val isSelected = selectedIndex == index
+
+                // Animasi warna ikon saat dipilih
+                val iconColor by animateColorAsState(
+                    targetValue = if (isSelected) PrimaryColor else TextColorSecondary.copy(alpha = 0.6f),
+                    animationSpec = tween(300),
+                    label = "iconColor"
+                )
+
+                // Item Navigasi
+                Column(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null // Matikan ripple standar agar lebih clean
+                        ) { onItemSelected(index) }
+                        .padding(12.dp), // Area sentuh
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = iconColor,
+                        modifier = Modifier.size(26.dp)
+                    )
+
+                    // Indikator Titik Kecil (Hanya muncul jika dipilih)
+                    AnimatedVisibility(
+                        visible = isSelected,
+                        enter = scaleIn() + fadeIn(),
+                        exit = scaleOut() + fadeOut()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .size(4.dp)
+                                .background(PrimaryColor, CircleShape)
+                        )
+                    }
+                }
+            }
         }
     }
 }
-
-data class NavigationItem(val route: String, val icon: ImageVector, val title: String)

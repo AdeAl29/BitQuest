@@ -12,6 +12,7 @@ import com.ade.habittracker.R
 import com.ade.habittracker.data.HabitRepository
 import com.ade.habittracker.model.Achievement
 import com.ade.habittracker.model.AppData
+import com.ade.habittracker.model.HabitHistoryItem
 import com.ade.habittracker.notification.HabitReminderWorker
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -40,8 +41,6 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = HabitRepository(application.applicationContext)
 
     // --- DAFTAR SEMUA AVATAR ---
-    // Pastikan file-file ini (avatar_level1, dll) juga ada di drawable
-    // Jika belum ada, ganti sementara dengan R.drawable.ic_launcher_foreground
     private val allAvatars = listOf(
         AvatarItem("avatar_level1", R.drawable.avatar_level1, 1),
         AvatarItem("avatar_level5", R.drawable.avatar_level5, 5),
@@ -66,7 +65,13 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         initialValue = null
     )
 
-    // --- LIST ACHIEVEMENT (DIPERBARUI MENGGUNAKAN GAMBAR ANDA) ---
+    // --- STATE FLOW KHUSUS RIWAYAT (HISTORY) ---
+    // Diurutkan dari yang paling baru (descending timestamp)
+    val habitHistory: StateFlow<List<HabitHistoryItem>> = appData.map { data ->
+        data?.history?.sortedByDescending { it.timestamp } ?: emptyList()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // --- LIST ACHIEVEMENT ---
     val achievements: StateFlow<List<Achievement>> = appData.map { data ->
         if (data == null) emptyList()
         else getAllAchievements(data.level, data.streak, data.totalXp, data.totalHabitsCompleted)
@@ -204,6 +209,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // 🔥 PERUBAHAN UTAMA: MENAMBAHKAN KE HISTORY SAAT COMPLETED 🔥
     fun toggleHabitCompleted(habitId: Int, isCompleted: Boolean) {
         viewModelScope.launch {
             val currentData = appData.value ?: return@launch
@@ -211,34 +217,55 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             var newTotalXp = currentData.totalXp
             var newTotalHabitsCompleted = currentData.totalHabitsCompleted
 
-            val updatedHabits = currentData.habits.map {
-                if (it.id == habitId) {
-                    if (isCompleted && !it.isCompleted) {
-                        newTotalXp += it.weight
+            // Salin list history yang ada agar bisa diedit
+            val currentHistory = currentData.history.toMutableList()
+
+            val updatedHabits = currentData.habits.map { habit ->
+                if (habit.id == habitId) {
+                    if (isCompleted && !habit.isCompleted) {
+                        // KONDISI: Misi Baru Selesai
+                        newTotalXp += habit.weight
                         newTotalHabitsCompleted += 1
-                    } else if (!isCompleted && it.isCompleted) {
-                        newTotalXp -= it.weight
+
+                        // --- TAMBAHKAN KE RIWAYAT (LOG) ---
+                        currentHistory.add(
+                            HabitHistoryItem(
+                                id = UUID.randomUUID().toString(),
+                                habitName = habit.name,
+                                xpEarned = habit.weight,
+                                timestamp = System.currentTimeMillis()
+                            )
+                        )
+
+                    } else if (!isCompleted && habit.isCompleted) {
+                        // KONDISI: Misi Dibatalkan (Uncheck)
+                        newTotalXp -= habit.weight
                         newTotalHabitsCompleted -= 1
+                        // Opsional: Kita tidak menghapus history agar tetap menjadi catatan "pernah selesai"
                     }
-                    it.copy(isCompleted = isCompleted)
+                    habit.copy(isCompleted = isCompleted)
                 } else {
-                    it
+                    habit
                 }
             }
 
+            // Validasi agar tidak minus
             if (newTotalXp < 0) newTotalXp = 0
             if (newTotalHabitsCompleted < 0) newTotalHabitsCompleted = 0
 
             val newLevel = calculateLevel(newTotalXp)
             val allHabitsCompleted = updatedHabits.isNotEmpty() && updatedHabits.all { it.isCompleted }
 
+            // Update Data
             val dataWithNewProgress = currentData.copy(
                 habits = updatedHabits,
                 totalXp = newTotalXp,
                 level = newLevel,
-                totalHabitsCompleted = newTotalHabitsCompleted
+                totalHabitsCompleted = newTotalHabitsCompleted,
+                history = currentHistory // Simpan history yang sudah diupdate
             )
 
+            // Cek Streak jika semua selesai
             val finalData = if (allHabitsCompleted) {
                 checkStreaks(dataWithNewProgress)
             } else {
@@ -296,7 +323,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    // --- FUNGSI GENERATE ACHIEVEMENT (SUDAH DIUPDATE DENGAN FILE GAMBAR ANDA) ---
+    // --- FUNGSI GENERATE ACHIEVEMENT ---
     private fun getAllAchievements(
         level: Int,
         streak: Int,
@@ -306,95 +333,90 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         val allAchievements = mutableListOf<Achievement>()
 
         // KATEGORI 1: Level Achievements
-        // Menggunakan: R.drawable.level5, level10, level20
         allAchievements.add(
             Achievement(
                 id = "level_5", title = "Kekuatan Baru", description = "Tunjukkan potensimu dan capai Level 5.",
-                iconResId = R.drawable.level5, // Menggunakan gambar Anda
+                iconResId = R.drawable.level5,
                 isUnlocked = level >= 5, progress = minOf(level, 5), goal = 5
             )
         )
         allAchievements.add(
             Achievement(
                 id = "level_10", title = "Pejuang Tangguh", description = "Disiplin adalah senjatamu. Capai Level 10.",
-                iconResId = R.drawable.level10, // Menggunakan gambar Anda
+                iconResId = R.drawable.level10,
                 isUnlocked = level >= 10, progress = minOf(level, 10), goal = 10
             )
         )
         allAchievements.add(
             Achievement(
                 id = "level_20", title = "Legenda Hidup", description = "Kamu telah menguasai dirimu. Capai Level 20.",
-                iconResId = R.drawable.level20, // Menggunakan gambar Anda
+                iconResId = R.drawable.level20,
                 isUnlocked = level >= 20, progress = minOf(level, 20), goal = 20
             )
         )
 
         // KATEGORI 2: Streak Achievements
-        // Menggunakan: R.drawable.streak3, streak7, streak30
         allAchievements.add(
             Achievement(
                 id = "streak_3", title = "Api Mulai Menyala", description = "Jaga apinya tetap menyala selama 3 hari beruntun.",
-                iconResId = R.drawable.streak3, // Menggunakan gambar Anda
+                iconResId = R.drawable.streak3,
                 isUnlocked = streak >= 3, progress = minOf(streak, 3), goal = 3
             )
         )
         allAchievements.add(
             Achievement(
                 id = "streak_7", title = "Kekuatan Kebiasaan", description = "Kamu tak terhentikan! Selesaikan 7 hari streak.",
-                iconResId = R.drawable.streak7, // Menggunakan gambar Anda
+                iconResId = R.drawable.streak7,
                 isUnlocked = streak >= 7, progress = minOf(streak, 7), goal = 7
             )
         )
         allAchievements.add(
             Achievement(
                 id = "streak_30", title = "Penguasa Waktu", description = "Satu bulan penuh dedikasi. Capai 30 hari streak.",
-                iconResId = R.drawable.streak30, // Menggunakan gambar Anda
+                iconResId = R.drawable.streak30,
                 isUnlocked = streak >= 30, progress = minOf(streak, 30), goal = 30
             )
         )
 
         // KATEGORI 3: Total XP Achievements
-        // Menggunakan: R.drawable.xp1000, xp5000
         allAchievements.add(
             Achievement(
                 id = "xp_1000", title = "Pemburu Poin", description = "Setiap poin berharga. Kumpulkan 1000 total XP.",
-                iconResId = R.drawable.xp1000, // Menggunakan gambar Anda
+                iconResId = R.drawable.xp1000,
                 isUnlocked = totalXp >= 1000, progress = minOf(totalXp, 1000), goal = 1000
             )
         )
         allAchievements.add(
             Achievement(
                 id = "xp_5000", title = "Veteran Elit", description = "Hanya untuk yang terkuat. Kumpulkan 5000 total XP.",
-                iconResId = R.drawable.xp5000, // Menggunakan gambar Anda
+                iconResId = R.drawable.xp5000,
                 isUnlocked = totalXp >= 5000, progress = minOf(totalXp, 5000), goal = 5000
             )
         )
 
         // KATEGORI 4: Total Habits Completed
-        // Menggunakan: R.drawable.misi1, misi50, misi200
         allAchievements.add(
             Achievement(
                 id = "habits_1", title = "Awal Perjalanan", description = "Perjalanan seribu mil dimulai dengan satu misi.",
-                iconResId = R.drawable.misi1, // Menggunakan gambar Anda
+                iconResId = R.drawable.misi1,
                 isUnlocked = totalHabitsCompleted >= 1, progress = minOf(totalHabitsCompleted, 1), goal = 1
             )
         )
         allAchievements.add(
             Achievement(
                 id = "habits_50", title = "Ksatria Produktif", description = "Terus maju! Selesaikan 50 total misi.",
-                iconResId = R.drawable.misi50, // Menggunakan gambar Anda
+                iconResId = R.drawable.misi50,
                 isUnlocked = totalHabitsCompleted >= 50, progress = minOf(totalHabitsCompleted, 50), goal = 50
             )
         )
         allAchievements.add(
             Achievement(
                 id = "habits_200", title = "Sang Penakluk Misi", description = "Tidak ada misi yang terlalu sulit. Selesaikan 200 misi.",
-                iconResId = R.drawable.misi200, // Menggunakan gambar Anda
+                iconResId = R.drawable.misi200,
                 isUnlocked = totalHabitsCompleted >= 200, progress = minOf(totalHabitsCompleted, 200), goal = 200
             )
         )
 
-        // Mengurutkan: Unlocked di bawah, Progress berjalan di atas
         return allAchievements.sortedWith(
             compareBy(
                 { it.isUnlocked },

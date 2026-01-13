@@ -4,30 +4,33 @@ import android.media.MediaPlayer
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ade.habittracker.R
+import com.ade.habittracker.ui.theme.AccentYellow
+import com.ade.habittracker.ui.theme.CardBackground
+import com.ade.habittracker.ui.theme.TextColorPrimary
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
-import kotlin.random.Random
 
-// 🔗 TEKS + SUARA SATU PAKET
 data class ChibiMessage(
     val text: String,
     val voiceRes: Int
@@ -38,24 +41,54 @@ fun DraggableChibiWithBubble(
     chibiRes: Int,
     messages: List<ChibiMessage>,
     modifier: Modifier = Modifier,
-    autoHideMillis: Long = 2500L
+    // --- PARAMETER BARU (Untuk Integrasi Achievement) ---
+    externalMessage: String? = null,      // Pesan dari luar (misal: "Misi Selesai +10XP")
+    onExternalMessageDismiss: () -> Unit = {} // Callback saat pesan luar selesai ditampilkan
 ) {
     val context = LocalContext.current
 
+    // State Posisi (Drag)
     var offset by remember { mutableStateOf(Offset.Zero) }
-    var showBubble by remember { mutableStateOf(false) }
-    var currentMessage by remember { mutableStateOf<ChibiMessage?>(null) }
+
+    // State Pesan Internal (Tap biasa)
+    var internalMessage by remember { mutableStateOf<ChibiMessage?>(null) }
+
+    // Logic: Tampilkan pesan eksternal DULUAN jika ada, kalau tidak baru pesan internal
+    val activeText = externalMessage ?: internalMessage?.text
+    val isBubbleVisible = activeText != null
+    val isExternalActive = externalMessage != null
+
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
 
-    // ⏱ auto-hide bubble
-    LaunchedEffect(showBubble) {
-        if (showBubble) {
-            delay(autoHideMillis)
-            showBubble = false
+    // 1. EFEK UNTUK PESAN EKSTERNAL (Saat Misi Selesai)
+    LaunchedEffect(externalMessage) {
+        if (externalMessage != null) {
+            // Hapus pesan internal biar gak tabrakan
+            internalMessage = null
+
+            // Mainkan suara 'Sukses' (Pastikan file raw ini ada)
+            mediaPlayer?.release()
+            mediaPlayer = MediaPlayer.create(context, R.raw.chibi_konsisten_keren)
+            mediaPlayer?.start()
+
+            // Tahan pesan achievement selama 3 detik
+            delay(3000)
+
+            // Beritahu parent bahwa pesan sudah selesai
+            onExternalMessageDismiss()
         }
     }
 
-    // 🧹 bersihkan MediaPlayer
+    // 2. EFEK UNTUK PESAN INTERNAL (Saat Di-Tap)
+    LaunchedEffect(internalMessage) {
+        if (internalMessage != null) {
+            // Tahan pesan tap selama 2.5 detik
+            delay(2500)
+            internalMessage = null
+        }
+    }
+
+    // Bersihkan MediaPlayer saat layar ditutup
     DisposableEffect(Unit) {
         onDispose {
             mediaPlayer?.release()
@@ -63,40 +96,30 @@ fun DraggableChibiWithBubble(
         }
     }
 
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.CenterEnd
-    ) {
+    // --- UI COMPONENT ---
+    Box(modifier = modifier, contentAlignment = Alignment.CenterEnd) {
+
         Box(
             modifier = Modifier
-                .offset {
-                    IntOffset(
-                        offset.x.roundToInt(),
-                        offset.y.roundToInt()
-                    )
-                }
-                // ✋ drag
+                .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
+                // Gesture Drag
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
                         offset += dragAmount
                     }
                 }
-                // 👆 tap
+                // Gesture Tap
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onTap = {
-                            if (messages.isNotEmpty()) {
+                            // Hanya respon tap jika TIDAK sedang menampilkan pesan achievement
+                            if (!isExternalActive && messages.isNotEmpty()) {
                                 val picked = messages.random()
-                                currentMessage = picked
-                                showBubble = true
+                                internalMessage = picked
 
-                                // 🔊 putar suara SESUAI teks
                                 mediaPlayer?.release()
-                                mediaPlayer = MediaPlayer.create(
-                                    context,
-                                    picked.voiceRes
-                                )
+                                mediaPlayer = MediaPlayer.create(context, picked.voiceRes)
                                 mediaPlayer?.start()
                             }
                         }
@@ -106,33 +129,38 @@ fun DraggableChibiWithBubble(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
 
+                // --- BUBBLE CHAT ---
                 AnimatedVisibility(
-                    visible = showBubble,
+                    visible = isBubbleVisible,
                     enter = fadeIn(),
                     exit = fadeOut()
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                Color.White.copy(alpha = 0.95f),
-                                RoundedCornerShape(12.dp)
-                            )
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    Surface(
+                        color = CardBackground,
+                        shape = RoundedCornerShape(12.dp),
+                        tonalElevation = 8.dp,
+                        shadowElevation = 8.dp,
+                        // Jika pesan achievement -> Beri border KUNING (Emas)
+                        border = if (isExternalActive) BorderStroke(2.dp, AccentYellow) else null
                     ) {
                         Text(
-                            text = currentMessage?.text.orEmpty(),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.Black
+                            text = activeText.orEmpty(),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            // Jika pesan achievement -> Teks KUNING (Emas), Normal -> Putih
+                            color = if (isExternalActive) AccentYellow else TextColorPrimary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
 
+                // --- GAMBAR CHIBI ---
                 Image(
                     painter = painterResource(id = chibiRes),
-                    contentDescription = null,
+                    contentDescription = "Chibi Helper",
                     modifier = Modifier.size(64.dp)
                 )
             }
