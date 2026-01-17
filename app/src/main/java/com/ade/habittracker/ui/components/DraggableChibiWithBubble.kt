@@ -68,7 +68,7 @@ fun DraggableChibiWithBubble(
 
             // Mainkan suara 'Sukses' (Pastikan file raw ini ada)
             mediaPlayer?.release()
-            mediaPlayer = MediaPlayer.create(context, R.raw.chibi_konsisten_keren)
+            mediaPlayer = MediaPlayer.create(context, R.raw.chibi_misi_selesai)
             mediaPlayer?.start()
 
             // Tahan pesan achievement selama 3 detik
@@ -161,7 +161,7 @@ fun DraggableChibiWithBubble(
                 Image(
                     painter = painterResource(id = chibiRes),
                     contentDescription = "Chibi Helper",
-                    modifier = Modifier.size(64.dp)
+                    modifier = Modifier.size(70.dp)
                 )
             }
         }

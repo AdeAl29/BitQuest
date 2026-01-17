@@ -44,6 +44,8 @@ fun StatsScreen(
     totalXp: Int,
     xpProgress: Int,
     maxXp: Int,
+    // 🔥 PARAMETER BARU: TOTAL LOGIN 🔥
+    totalLoginDays: Int,
     userName: String,
     userTitle: String,
     @DrawableRes profileImageResId: Int,
@@ -182,7 +184,6 @@ fun StatsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // ─── GRID STATISTIK RPG ───
-            // Menggunakan Grid agar terlihat seperti Inventory/Stats Game
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -207,13 +208,13 @@ fun StatsScreen(
                         value = "$totalXp XP",
                         icon = Icons.Default.Star,
                         iconColor = AccentYellow,
-                        subText = "Klik utk Riwayat 📜", // Indikator bisa diklik
+                        subText = "Klik utk Riwayat 📜",
                         isClickable = true,
                         onClick = { showHistoryDialog = true }
                     )
                 }
 
-                // 3. KARTU TOTAL MISI (Dari jumlah history)
+                // 3. KARTU TOTAL MISI
                 item {
                     GameStatCard(
                         title = "Misi Selesai",
@@ -224,20 +225,19 @@ fun StatsScreen(
                     )
                 }
 
-                // 4. KARTU PRODUKTIVITAS (Rata-rata XP)
+                // 4. 🔥 KARTU TOTAL LOGIN (BARU) 🔥
                 item {
-                    val avg = if (historyList.isNotEmpty()) totalXp / historyList.size else 0
                     GameStatCard(
-                        title = "Rata-rata",
-                        value = "$avg XP",
-                        icon = Icons.Default.Timeline,
-                        iconColor = Color(0xFF2196F3), // Biru
-                        subText = "Per Misi"
+                        title = "Total Login",
+                        value = "$totalLoginDays Hari",
+                        icon = Icons.Default.DateRange, // Icon Kalender
+                        iconColor = Color(0xFF2196F3), // Biru Langit
+                        subText = "Dedikasi Waktu"
                     )
                 }
             }
 
-            // BUTTON NOTIFIKASI (Di bawah)
+            // BUTTON NOTIFIKASI
             Button(
                 onClick = onScheduleReminderClick,
                 shape = RoundedCornerShape(12.dp),

@@ -38,13 +38,23 @@ data class AppData(
     val streak: Int = 0,
     val totalHabitsCompleted: Int = 0,
 
+    // 🔥 DATA TOTAL LOGIN 🔥
+    val totalLoginDays: Int = 1, // Default 1 (Dihitung sejak hari pertama install)
+
     // --- Logika Tanggal ---
-    val lastCompletionDate: String = "", // Format: yyyy-MM-dd
-    val lastResetDate: String = "",      // Format: yyyy-MM-dd
+    val lastCompletionDate: String = "",    // Format: yyyy-MM-dd (Harian)
+    val lastResetDate: String = "",         // Format: yyyy-MM-dd (Harian)
+
+    // 🔥 DATA RESET BULANAN 🔥
+    val lastMonthlyResetDate: String = "",  // Format: yyyy-MM (Untuk cek ganti bulan)
+
+    // 🔥 PENGATURAN APLIKASI (SETTINGS) - UPDATE 🔥
+    val isMusicEnabled: Boolean = true, // Status Musik (Nyala/Mati)
+    val isChibiEnabled: Boolean = true, // Status Chibi (Nyala/Mati) - Sekarang Boolean
 
     // --- Daftar Data ---
     val habits: List<Habit> = emptyList(),
-    val history: List<HabitHistoryItem> = emptyList() // <-- Field Baru untuk Riwayat
+    val history: List<HabitHistoryItem> = emptyList()
 ) {
     // Fungsi Helper untuk Simpan ke JSON
     fun toJson(): String {
@@ -62,6 +72,7 @@ data class AppData(
             val jsonConfig = Json {
                 ignoreUnknownKeys = true // PENTING: Agar tidak crash jika ada field baru/lama beda
                 coerceInputValues = true
+                encodeDefaults = true // Penting agar field baru terisi default jika data lama belum punya
             }
             return try {
                 jsonConfig.decodeFromString(jsonString)

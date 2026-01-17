@@ -66,7 +66,6 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     // --- STATE FLOW KHUSUS RIWAYAT (HISTORY) ---
-    // Diurutkan dari yang paling baru (descending timestamp)
     val habitHistory: StateFlow<List<HabitHistoryItem>> = appData.map { data ->
         data?.history?.sortedByDescending { it.timestamp } ?: emptyList()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -106,7 +105,25 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), R.drawable.avatar_level1)
 
 
-    // --- FUNGSI UPDATE DATA ---
+    // --- FUNGSI UPDATE SETTINGS (UPDATE) ---
+
+    // 1. Musik ON/OFF
+    fun setMusicEnabled(isEnabled: Boolean) {
+        viewModelScope.launch {
+            val currentData = appData.value ?: return@launch
+            repository.saveAppData(currentData.copy(isMusicEnabled = isEnabled))
+        }
+    }
+
+    // 2. Chibi ON/OFF
+    fun setChibiEnabled(isEnabled: Boolean) {
+        viewModelScope.launch {
+            val currentData = appData.value ?: return@launch
+            repository.saveAppData(currentData.copy(isChibiEnabled = isEnabled))
+        }
+    }
+
+    // --- FUNGSI UPDATE PROFIL ---
 
     fun updateUserName(newName: String) {
         viewModelScope.launch {
@@ -131,21 +148,52 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- LOGIK HABIT & PROGRESS ---
+    // --- LOGIK HABIT, PROGRESS, RESET HARIAN & BULANAN ---
 
     fun resetHabitsIfNewDay() {
         viewModelScope.launch {
             val currentData = appData.value ?: return@launch
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val todayStr = dateFormat.format(Date())
 
-            if (currentData.lastResetDate != todayStr) {
-                val resetHabits = currentData.habits.map { it.copy(isCompleted = false) }
-                val newData = currentData.copy(
+            val dailyFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val monthlyFormat = SimpleDateFormat("yyyy-MM", Locale.getDefault()) // Format Bulan
+
+            val now = Date()
+            val todayStr = dailyFormat.format(now)
+            val currentMonthStr = monthlyFormat.format(now)
+
+            var updatedData = currentData
+
+            // 1. CEK RESET BULANAN (Season Baru)
+            if (updatedData.lastMonthlyResetDate != currentMonthStr) {
+                // Hanya reset jika ini bukan install pertama (field tidak kosong)
+                if (updatedData.lastMonthlyResetDate.isNotEmpty()) {
+                    updatedData = updatedData.copy(
+                        level = 1,      // Reset Level ke 1
+                        totalXp = 0     // Reset XP ke 0
+                        // Streak dan Total Habits TIDAK direset agar user tetap semangat
+                    )
+                }
+                // Update penanda bulan terakhir
+                updatedData = updatedData.copy(lastMonthlyResetDate = currentMonthStr)
+            }
+
+            // 2. CEK RESET HARIAN
+            if (updatedData.lastResetDate != todayStr) {
+                val resetHabits = updatedData.habits.map { it.copy(isCompleted = false) }
+
+                // Tambah hari login
+                val newTotalLogin = updatedData.totalLoginDays + 1
+
+                updatedData = updatedData.copy(
                     habits = resetHabits,
-                    lastResetDate = todayStr
+                    lastResetDate = todayStr,
+                    totalLoginDays = newTotalLogin
                 )
-                repository.saveAppData(newData)
+            }
+
+            // Simpan perubahan jika ada data yang berubah
+            if (updatedData != currentData) {
+                repository.saveAppData(updatedData)
             }
         }
     }
@@ -209,25 +257,30 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 🔥 PERUBAHAN UTAMA: MENAMBAHKAN KE HISTORY SAAT COMPLETED 🔥
+    // 🔥 LOGIC UTAMA: ONE-WAY CHECK (TIDAK BISA UNCHECK) 🔥
     fun toggleHabitCompleted(habitId: Int, isCompleted: Boolean) {
         viewModelScope.launch {
             val currentData = appData.value ?: return@launch
 
+            val targetHabit = currentData.habits.find { it.id == habitId } ?: return@launch
+
+            // CEGAH UNCHECK:
+            if (targetHabit.isCompleted && !isCompleted) {
+                return@launch
+            }
+
             var newTotalXp = currentData.totalXp
             var newTotalHabitsCompleted = currentData.totalHabitsCompleted
-
-            // Salin list history yang ada agar bisa diedit
             val currentHistory = currentData.history.toMutableList()
 
             val updatedHabits = currentData.habits.map { habit ->
                 if (habit.id == habitId) {
+                    // Jika user mencentang (dari False ke True)
                     if (isCompleted && !habit.isCompleted) {
-                        // KONDISI: Misi Baru Selesai
                         newTotalXp += habit.weight
                         newTotalHabitsCompleted += 1
 
-                        // --- TAMBAHKAN KE RIWAYAT (LOG) ---
+                        // Catat ke History
                         currentHistory.add(
                             HabitHistoryItem(
                                 id = UUID.randomUUID().toString(),
@@ -236,36 +289,29 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                                 timestamp = System.currentTimeMillis()
                             )
                         )
-
-                    } else if (!isCompleted && habit.isCompleted) {
-                        // KONDISI: Misi Dibatalkan (Uncheck)
-                        newTotalXp -= habit.weight
-                        newTotalHabitsCompleted -= 1
-                        // Opsional: Kita tidak menghapus history agar tetap menjadi catatan "pernah selesai"
+                        habit.copy(isCompleted = true)
+                    } else {
+                        habit
                     }
-                    habit.copy(isCompleted = isCompleted)
                 } else {
                     habit
                 }
             }
 
-            // Validasi agar tidak minus
             if (newTotalXp < 0) newTotalXp = 0
             if (newTotalHabitsCompleted < 0) newTotalHabitsCompleted = 0
 
             val newLevel = calculateLevel(newTotalXp)
             val allHabitsCompleted = updatedHabits.isNotEmpty() && updatedHabits.all { it.isCompleted }
 
-            // Update Data
             val dataWithNewProgress = currentData.copy(
                 habits = updatedHabits,
                 totalXp = newTotalXp,
                 level = newLevel,
                 totalHabitsCompleted = newTotalHabitsCompleted,
-                history = currentHistory // Simpan history yang sudah diupdate
+                history = currentHistory
             )
 
-            // Cek Streak jika semua selesai
             val finalData = if (allHabitsCompleted) {
                 checkStreaks(dataWithNewProgress)
             } else {
@@ -333,95 +379,24 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         val allAchievements = mutableListOf<Achievement>()
 
         // KATEGORI 1: Level Achievements
-        allAchievements.add(
-            Achievement(
-                id = "level_5", title = "Kekuatan Baru", description = "Tunjukkan potensimu dan capai Level 5.",
-                iconResId = R.drawable.level5,
-                isUnlocked = level >= 5, progress = minOf(level, 5), goal = 5
-            )
-        )
-        allAchievements.add(
-            Achievement(
-                id = "level_10", title = "Pejuang Tangguh", description = "Disiplin adalah senjatamu. Capai Level 10.",
-                iconResId = R.drawable.level10,
-                isUnlocked = level >= 10, progress = minOf(level, 10), goal = 10
-            )
-        )
-        allAchievements.add(
-            Achievement(
-                id = "level_20", title = "Legenda Hidup", description = "Kamu telah menguasai dirimu. Capai Level 20.",
-                iconResId = R.drawable.level20,
-                isUnlocked = level >= 20, progress = minOf(level, 20), goal = 20
-            )
-        )
+        allAchievements.add(Achievement("level_5", "Kekuatan Baru", "Tunjukkan potensimu dan capai Level 5.", R.drawable.level5, level >= 5, minOf(level, 5), 5))
+        allAchievements.add(Achievement("level_10", "Pejuang Tangguh", "Disiplin adalah senjatamu. Capai Level 10.", R.drawable.level10, level >= 10, minOf(level, 10), 10))
+        allAchievements.add(Achievement("level_20", "Legenda Hidup", "Kamu telah menguasai dirimu. Capai Level 20.", R.drawable.level20, level >= 20, minOf(level, 20), 20))
 
         // KATEGORI 2: Streak Achievements
-        allAchievements.add(
-            Achievement(
-                id = "streak_3", title = "Api Mulai Menyala", description = "Jaga apinya tetap menyala selama 3 hari beruntun.",
-                iconResId = R.drawable.streak3,
-                isUnlocked = streak >= 3, progress = minOf(streak, 3), goal = 3
-            )
-        )
-        allAchievements.add(
-            Achievement(
-                id = "streak_7", title = "Kekuatan Kebiasaan", description = "Kamu tak terhentikan! Selesaikan 7 hari streak.",
-                iconResId = R.drawable.streak7,
-                isUnlocked = streak >= 7, progress = minOf(streak, 7), goal = 7
-            )
-        )
-        allAchievements.add(
-            Achievement(
-                id = "streak_30", title = "Penguasa Waktu", description = "Satu bulan penuh dedikasi. Capai 30 hari streak.",
-                iconResId = R.drawable.streak30,
-                isUnlocked = streak >= 30, progress = minOf(streak, 30), goal = 30
-            )
-        )
+        allAchievements.add(Achievement("streak_3", "Api Mulai Menyala", "Jaga apinya tetap menyala selama 3 hari beruntun.", R.drawable.streak3, streak >= 3, minOf(streak, 3), 3))
+        allAchievements.add(Achievement("streak_7", "Kekuatan Kebiasaan", "Kamu tak terhentikan! Selesaikan 7 hari streak.", R.drawable.streak7, streak >= 7, minOf(streak, 7), 7))
+        allAchievements.add(Achievement("streak_30", "Penguasa Waktu", "Satu bulan penuh dedikasi. Capai 30 hari streak.", R.drawable.streak30, streak >= 30, minOf(streak, 30), 30))
 
         // KATEGORI 3: Total XP Achievements
-        allAchievements.add(
-            Achievement(
-                id = "xp_1000", title = "Pemburu Poin", description = "Setiap poin berharga. Kumpulkan 1000 total XP.",
-                iconResId = R.drawable.xp1000,
-                isUnlocked = totalXp >= 1000, progress = minOf(totalXp, 1000), goal = 1000
-            )
-        )
-        allAchievements.add(
-            Achievement(
-                id = "xp_5000", title = "Veteran Elit", description = "Hanya untuk yang terkuat. Kumpulkan 5000 total XP.",
-                iconResId = R.drawable.xp5000,
-                isUnlocked = totalXp >= 5000, progress = minOf(totalXp, 5000), goal = 5000
-            )
-        )
+        allAchievements.add(Achievement("xp_1000", "Pemburu Poin", "Setiap poin berharga. Kumpulkan 1000 total XP.", R.drawable.xp1000, totalXp >= 1000, minOf(totalXp, 1000), 1000))
+        allAchievements.add(Achievement("xp_5000", "Veteran Elit", "Hanya untuk yang terkuat. Kumpulkan 5000 total XP.", R.drawable.xp5000, totalXp >= 5000, minOf(totalXp, 5000), 5000))
 
         // KATEGORI 4: Total Habits Completed
-        allAchievements.add(
-            Achievement(
-                id = "habits_1", title = "Awal Perjalanan", description = "Perjalanan seribu mil dimulai dengan satu misi.",
-                iconResId = R.drawable.misi1,
-                isUnlocked = totalHabitsCompleted >= 1, progress = minOf(totalHabitsCompleted, 1), goal = 1
-            )
-        )
-        allAchievements.add(
-            Achievement(
-                id = "habits_50", title = "Ksatria Produktif", description = "Terus maju! Selesaikan 50 total misi.",
-                iconResId = R.drawable.misi50,
-                isUnlocked = totalHabitsCompleted >= 50, progress = minOf(totalHabitsCompleted, 50), goal = 50
-            )
-        )
-        allAchievements.add(
-            Achievement(
-                id = "habits_200", title = "Sang Penakluk Misi", description = "Tidak ada misi yang terlalu sulit. Selesaikan 200 misi.",
-                iconResId = R.drawable.misi200,
-                isUnlocked = totalHabitsCompleted >= 200, progress = minOf(totalHabitsCompleted, 200), goal = 200
-            )
-        )
+        allAchievements.add(Achievement("habits_1", "Awal Perjalanan", "Perjalanan seribu mil dimulai dengan satu misi.", R.drawable.misi1, totalHabitsCompleted >= 1, minOf(totalHabitsCompleted, 1), 1))
+        allAchievements.add(Achievement("habits_50", "Ksatria Produktif", "Terus maju! Selesaikan 50 total misi.", R.drawable.misi50, totalHabitsCompleted >= 50, minOf(totalHabitsCompleted, 50), 50))
+        allAchievements.add(Achievement("habits_200", "Sang Penakluk Misi", "Tidak ada misi yang terlalu sulit. Selesaikan 200 misi.", R.drawable.misi200, totalHabitsCompleted >= 200, minOf(totalHabitsCompleted, 200), 200))
 
-        return allAchievements.sortedWith(
-            compareBy(
-                { it.isUnlocked },
-                { !(it.progress > 0 && !it.isUnlocked) }
-            )
-        )
+        return allAchievements.sortedWith(compareBy({ it.isUnlocked }, { !(it.progress > 0 && !it.isUnlocked) }))
     }
 }

@@ -19,6 +19,7 @@ import com.ade.habittracker.model.Habit
 import com.ade.habittracker.ui.components.*
 import com.ade.habittracker.ui.theme.*
 
+// Enum untuk Mode Filter/Sorting
 enum class HabitFilterMode(val label: String) {
     NONE("Tanpa Filter"),
     EASY_TO_HARD("Ringan → Berat"),
@@ -29,24 +30,26 @@ enum class HabitFilterMode(val label: String) {
 @Composable
 fun HabitsScreen(
     habits: List<Habit>,
+    // 🔥 PARAMETER BARU: Status Chibi (ON/OFF)
+    isChibiEnabled: Boolean = true,
     onHabitCheckedChanged: (Habit, Boolean) -> Unit,
     onEditClick: (Habit) -> Unit,
     onDeleteClick: (Habit) -> Unit
 ) {
+    // State untuk Menu Dropdown pada setiap item Habit
     var expandedMenuHabitId by remember { mutableStateOf<Int?>(null) }
 
-    // Filter
+    // State untuk Menu Filter
     var filterMenuExpanded by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(HabitFilterMode.NONE) }
 
-    // Panduan
+    // State untuk Dialog Panduan
     var showGuide by remember { mutableStateOf(false) }
 
-    // Achievement toast
-    var achievementMessage by remember { mutableStateOf<String?>(null) }
-    var achievementXp by remember { mutableStateOf(0) }
+    // --- STATE KOMUNIKASI KE CHIBI ---
+    var chibiNotification by remember { mutableStateOf<String?>(null) }
 
-    // Sorting
+    // Logika Sorting List berdasarkan Filter yang dipilih
     val sortedHabits = remember(habits, selectedFilter) {
         when (selectedFilter) {
             HabitFilterMode.NONE -> habits
@@ -55,7 +58,7 @@ fun HabitsScreen(
         }
     }
 
-    // Chibi voice messages
+    // Daftar Suara & Pesan Random Chibi
     val chibiMessages = listOf(
         ChibiMessage("Ayo satu misi lagi!", R.raw.chibi_ayo_satu_misi),
         ChibiMessage("Jangan bolos ya!", R.raw.chibi_jangan_bolos),
@@ -66,64 +69,63 @@ fun HabitsScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // ❄ background
+        // 1. Background Efek Salju
         FallingSnowEffect(
             modifier = Modifier.fillMaxSize().zIndex(0f)
         )
 
-        // 📋 Konten utama
+        // 2. Konten Utama (List & Header)
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp).zIndex(1f)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .zIndex(1f)
         ) {
-            // 🔹 Header + buttons kanan atas
+            // --- HEADER & TOMBOL ACTION ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "DAFTAR MISI HARIAN",
+                    text = "DAFTAR MISI HARIAN",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextColorPrimary
                 )
 
                 Row {
-
-                    // ❓ Tombol panduan
+                    // Tombol Panduan
                     IconButton(onClick = { showGuide = true }) {
                         Icon(Icons.Default.Help, "Panduan", tint = AccentYellow)
                     }
 
-                    // 🔽 Tombol filter
-                    IconButton(onClick = { filterMenuExpanded = true }) {
-                        Icon(Icons.Default.FilterList, "Filter", tint = AccentYellow)
-                    }
+                    // Tombol Filter
+                    Box {
+                        IconButton(onClick = { filterMenuExpanded = true }) {
+                            Icon(Icons.Default.FilterList, "Filter", tint = AccentYellow)
+                        }
 
-                    // Menu filter
-                    DropdownMenu(
-                        expanded = filterMenuExpanded,
-                        onDismissRequest = { filterMenuExpanded = false },
-                        containerColor = CardBackground
-                    ) {
-                        HabitFilterMode.values().forEach { mode ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        mode.label,
-                                        color =
-                                            if (selectedFilter == mode) AccentYellow
-                                            else TextColorPrimary,
-                                        fontWeight =
-                                            if (selectedFilter == mode) FontWeight.Bold
-                                            else FontWeight.Normal
-                                    )
-                                },
-                                onClick = {
-                                    selectedFilter = mode
-                                    filterMenuExpanded = false
-                                }
-                            )
+                        DropdownMenu(
+                            expanded = filterMenuExpanded,
+                            onDismissRequest = { filterMenuExpanded = false },
+                            containerColor = CardBackground
+                        ) {
+                            HabitFilterMode.values().forEach { mode ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            mode.label,
+                                            color = if (selectedFilter == mode) AccentYellow else TextColorPrimary,
+                                            fontWeight = if (selectedFilter == mode) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedFilter = mode
+                                        filterMenuExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -131,6 +133,7 @@ fun HabitsScreen(
 
             Spacer(Modifier.height(12.dp))
 
+            // --- LIST HABIT ---
             if (sortedHabits.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -139,22 +142,23 @@ fun HabitsScreen(
                     Text("Belum ada misi. Tambahkan satu!", color = TextColorSecondary)
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
                     items(sortedHabits, key = { it.id }) { habit ->
                         HabitItem(
                             habit = habit,
                             onCheckedChanged = { checked ->
                                 if (!habit.isCompleted && checked) {
-                                    achievementMessage =
-                                        "Keren! kamu menyelesaikan '${habit.name}'"
-                                    achievementXp = habit.weight * 1
+                                    // Kirim notifikasi ke Chibi (jika aktif)
+                                    chibiNotification = "Keren! Misi Selesai!\n+${habit.weight} XP"
                                 }
                                 onHabitCheckedChanged(habit, checked)
                             },
                             isMenuExpanded = expandedMenuHabitId == habit.id,
                             onMenuClick = {
-                                expandedMenuHabitId =
-                                    if (expandedMenuHabitId == habit.id) null else habit.id
+                                expandedMenuHabitId = if (expandedMenuHabitId == habit.id) null else habit.id
                             },
                             onDismissMenu = { expandedMenuHabitId = null },
                             onEditClick = { onEditClick(habit) },
@@ -165,24 +169,20 @@ fun HabitsScreen(
             }
         }
 
-        // 🧸 Chibi draggable
-        DraggableChibiWithBubble(
-            chibiRes = R.drawable.chibi_helper,
-            messages = chibiMessages,
-            modifier = Modifier.fillMaxSize().zIndex(50f)
-        )
-
-        // 🏆 Achievement toast
-        achievementMessage?.let {
-            AchievementToast(
-                title = "Misi Selesai!",
-                description = it,
-                xp = achievementXp,
-                onDismiss = { achievementMessage = null }
+        // 3. CHIBI ASSISTANT (Hanya muncul jika Enabled)
+        if (isChibiEnabled) {
+            DraggableChibiWithBubble(
+                chibiRes = R.drawable.chibi_helper, // Kembali ke resource default
+                messages = chibiMessages,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(50f),
+                externalMessage = chibiNotification,
+                onExternalMessageDismiss = { chibiNotification = null }
             )
         }
 
-        // 📘 Panduan dialog
+        // 4. DIALOG PANDUAN
         if (showGuide) {
             AlertDialog(
                 onDismissRequest = { showGuide = false },
@@ -192,20 +192,13 @@ fun HabitsScreen(
                     }
                 },
                 title = {
-                    Text("PANDUAN APLIKASI",
-                        color = TextColorPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("PANDUAN APLIKASI", color = TextColorPrimary, fontWeight = FontWeight.Bold)
                 },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("• Centang misi untuk menyelesaikan hari ini.", color = TextColorSecondary)
-                        Text("• Bobot (weight) menentukan XP & filter.", color = TextColorSecondary)
-                        Text("• Tekan titik tiga untuk edit / hapus.", color = TextColorSecondary)
-                        Text("• Tekan chibi untuk pesan + suara.", color = TextColorSecondary)
-                        Text("• Gunakan filter untuk urutkan misi.", color = TextColorSecondary)
-                        Text("• XP & level naik sesuai konsistensi.", color = TextColorSecondary)
-                        Text("• Buka tiap hari agar streak tidak hilang!", color = TextColorSecondary)
+                        Text("• Centang misi untuk menyelesaikan.", color = TextColorSecondary)
+                        Text("• Misi selesai tidak bisa dibatalkan.", color = TextColorSecondary)
+                        Text("• Chibi bisa dimatikan di menu Pengaturan.", color = TextColorSecondary)
                     }
                 },
                 containerColor = CardBackground
